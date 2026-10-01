@@ -1,15 +1,15 @@
 # CRUD Confeitaria - Web API em C#
 
-Uma Web API simples e de alta performance desenvolvida em C# (.NET) com Minimal APIs e Entity Framework Core, conectada ao banco de dados PostgreSQL do Supabase.
+Uma Web API simples desenvolvida em C# (.NET) com Minimal APIs e Entity Framework Core, conectada ao banco de dados PostgreSQL do Supabase.
 
-Este projeto tem como objetivo gerenciar os processos básicos de uma confeitaria (produtos, categorias, clientes e pedidos) utilizando uma arquitetura enxuta e moderna.
+Este projeto tem como objetivo gerenciar os processos básicos de uma confeitaria ficticia (produtos, categorias, clientes e pedidos) utilizando uma arquitetura enxuta e moderna.
 
 ---
 
 ## Objetivos e Características do Projeto
 
-* **Estrutura Enxuta:** Desenvolvido com Minimal APIs do .NET para código simples, direto e de baixa complexidade.
-* **ORM Moderno:** Uso do Entity Framework Core para mapeamento e manipulação de dados sem necessidade de escrever SQL puro.
+* **Estrutura Enxuta:** Desenvolvido com Minimal APIs do .NET para código simples e direto .
+* **ORM Moderno:** Uso do Entity Framework Core para mapeamento e manipulação de dados sem necessidade de escrever SQL puro(gosto de SQL mas isso aqui é bom d+).
 * **Banco na Nuvem:** Conexão nativa com PostgreSQL hospedado no Supabase.
 * **Gerenciamento de Pacotes:** Restauração automática de dependências (sem necessidade de ambientes virtuais como no Python).
 
