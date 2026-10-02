@@ -326,7 +326,7 @@ No Django, pense em `migrations add` como `makemigrations` e `database update` c
 
 Não cole saídas de `dotnet user-secrets list` em mensagens: elas podem conter credenciais. O aviso de bloqueio de `profile.ps1` é separado da API e não impede executar comandos diretos como `Invoke-RestMethod`.
 
-## Tutorial de Git para o grupo
+## Tutorial de Git para a Rapaziada
 
 ### 1. Entender os termos
 
