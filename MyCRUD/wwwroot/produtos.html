@@ -1,0 +1,245 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Produtos — Confeitaria</title>
+</head>
+<body>
+    <h1>Produtos da confeitaria</h1>
+
+    <nav>
+        <a href="/login.html">Login</a>
+        <button id="sair" type="button">Sair</button>
+    </nav>
+
+    <h2 id="titulo-formulario">Cadastrar produto</h2>
+
+    <form id="form-produto">
+        <p>
+            <label for="nome">Nome:</label>
+            <input id="nome" name="nome" required>
+        </p>
+
+        <p>
+            <label for="preco">Preço:</label>
+            <input id="preco" name="preco"
+                   type="number" min="0.01" step="0.01" required>
+        </p>
+
+        <p>
+            <label for="categoriaId">ID da categoria:</label>
+            <input id="categoriaId" name="categoriaId"
+                   type="number" min="1" step="1" required>
+        </p>
+
+        <p id="campo-ativo" hidden>
+            <label><input name="ativo" type="checkbox" checked> Ativo</label>
+        </p>
+        <button type="submit">Cadastrar</button>
+        <button id="cancelar" type="button" hidden>Cancelar edição</button>
+    </form>
+
+    <p id="mensagem" role="status"></p>
+
+    <h2>Produtos cadastrados</h2>
+
+    <button id="atualizar" type="button">Atualizar lista</button>
+
+    <table border="1">
+        <thead>
+            <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Nome</th>
+                <th scope="col">Preço</th>
+                <th scope="col">Categoria</th>
+                <th scope="col">Ativo</th>
+                <th scope="col">Ações</th>
+            </tr>
+        </thead>
+        <tbody id="produtos"></tbody>
+    </table>
+    
+    <script>const formulario = document.querySelector("#form-produto"); // Seleciona o formulário de cadastro de produtos
+        const tabela = document.querySelector("#produtos"); // Seleciona o corpo da tabela onde os produtos serão exibidos
+        const mensagem = document.querySelector("#mensagem"); // Seleciona o elemento onde mensagens de status serão exibidas
+        const titulo = document.querySelector("#titulo-formulario");
+        const campoAtivo = document.querySelector("#campo-ativo");
+        const cancelar = document.querySelector("#cancelar");
+        const salvar = formulario.querySelector('button[type="submit"]');
+        let idEmEdicao = null;
+
+        const sair = document.querySelector("#sair");
+        sair.addEventListener("click", async () => {
+            sair.disabled = true;
+
+            try {
+                const resposta = await fetch("/login/sair", { method: "POST" });
+
+                if (resposta.ok || resposta.status === 401) {
+                    window.location.href = "/login.html";
+                    return;
+                }
+
+                mensagem.textContent = "Não foi possível sair. Tente novamente.";
+            } catch {
+                mensagem.textContent = "Não foi possível conectar ao servidor.";
+            } finally {
+                sair.disabled = false;
+            }
+        });
+
+        function encerrarEdicao() {
+            idEmEdicao = null;
+            formulario.reset();
+            titulo.textContent = "Cadastrar produto";
+            salvar.textContent = "Cadastrar";
+            campoAtivo.hidden = true;
+            cancelar.hidden = true;
+        }
+
+        cancelar.addEventListener("click", () => {
+            encerrarEdicao();
+            mensagem.textContent = "Edição cancelada.";
+        });
+
+        async function carregarProdutos() { 
+            const resposta = await fetch("/produtos/");
+
+            if (!resposta.ok) {
+                throw new Error("Não foi possível carregar os produtos.");
+            }
+
+            const produtos = await resposta.json(); // Converte a resposta em JSON
+            tabela.replaceChildren();
+
+            for (const produto of produtos) { // É impossivel escapar do JavaScript 
+                const linha = document.createElement("tr");
+
+                const valores = [
+                    produto.id,
+                    produto.nome,
+                    Number(produto.preco).toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL"
+                    }),
+                    produto.categoriaId,
+                    produto.ativo ? "Sim" : "Não"
+                ];
+
+                for (const valor of valores) { // Itera sobre os valores do produto e cria células na tabela
+                    const celula = document.createElement("td");
+                    celula.textContent = valor;
+                    linha.appendChild(celula);
+                }
+
+                const acoes = document.createElement("td");
+                const editar = document.createElement("button");
+                editar.type = "button";
+                editar.textContent = "Editar";
+                editar.addEventListener("click", () => {
+                    if (salvar.disabled) return;
+                    idEmEdicao = produto.id;
+                    formulario.elements.nome.value = produto.nome;
+                    formulario.elements.preco.value = produto.preco;
+                    formulario.elements.categoriaId.value = produto.categoriaId;
+                    formulario.elements.ativo.checked = produto.ativo;
+                    titulo.textContent = `Editar produto ${produto.id}`;
+                    salvar.textContent = "Salvar alterações";
+                    campoAtivo.hidden = false;
+                    cancelar.hidden = false;
+                    mensagem.textContent = "";
+                    formulario.elements.nome.focus();
+                });
+                const excluir = document.createElement("button");
+                excluir.type = "button";
+                excluir.textContent = "Excluir";
+
+                excluir.addEventListener("click", async () => {
+                    if (!confirm(`Excluir o produto "${produto.nome}"?`)) {
+                        return;
+                    }
+
+                    excluir.disabled = true;
+
+                    try {
+                        const resposta = await fetch(
+                            `/produtos/${produto.id}`,
+                            { method: "DELETE" }
+                        );
+
+                        if (!resposta.ok) {
+                            throw new Error("Não foi possível excluir o produto.");
+                        }
+
+                        mensagem.textContent = "Produto excluído.";
+                        if (idEmEdicao === produto.id) encerrarEdicao();
+                        await carregarProdutos();
+                    } catch (erro) {
+                        mensagem.textContent = erro.message;
+                    } finally {
+                        excluir.disabled = false;
+                    }
+                });
+
+                acoes.append(editar, " ", excluir);
+                linha.appendChild(acoes);
+                tabela.appendChild(linha);
+            }
+        }
+
+        formulario.addEventListener("submit", async (evento) => { // Adiciona um ouvinte de evento para o envio do formulário
+            evento.preventDefault(); 
+
+            const botao = formulario.querySelector("button");
+            botao.disabled = true;
+            cancelar.disabled = true;
+            const editando = idEmEdicao !== null;
+
+            try {
+                const resposta = await fetch(editando ? `/produtos/${idEmEdicao}` : "/produtos/", {
+                    method: editando ? "PUT" : "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        nome: formulario.elements.nome.value,
+                        preco: Number(formulario.elements.preco.value),
+                        categoriaId: Number(
+                            formulario.elements.categoriaId.value
+                        ),
+                        ativo: formulario.elements.ativo.checked
+                    })
+                });
+
+                if (!resposta.ok) {
+                    throw new Error(
+                        resposta.status === 404
+                            ? "O produto não existe mais. Cancele a edição e atualize a lista."
+                            : "Não foi possível salvar. Confira os dados e seu login."
+                    );
+                }
+
+                encerrarEdicao();
+                mensagem.textContent = editando ? "Produto atualizado." : "Produto cadastrado.";
+                await carregarProdutos();
+            } catch (erro) {
+                mensagem.textContent = erro.message;
+            } finally {
+                botao.disabled = false;
+                cancelar.disabled = false;
+            }
+        });
+
+        async function atualizarLista() { // Função para atualizar a lista de produtos
+            try {
+                await carregarProdutos();
+            } catch (erro) {
+                mensagem.textContent = erro.message;
+            }
+        }
+
+        document.querySelector("#atualizar")
+            .addEventListener("click", atualizarLista);
+
+        atualizarLista();</script>
+</body>
+</html>
