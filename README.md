@@ -32,14 +32,9 @@ Limites atuais:
 
 - Categorias, clientes e pedidos ainda não possuem entidades, tabelas ou CRUD.
 - `CategoriaId` é um número no produto, sem relação com uma tabela de categorias.
-- A edição de produtos usa o mesmo formulário de cadastro, incluindo a opção Ativo.
-- O botão Sair na página de produtos encerra a sessão e volta ao login.
-- As páginas HTML são públicas; os dados e operações de produtos exigem login.
+- As páginas HTML são públicas; mas os dados e operações de produtos exigem login.
 - O cadastro de usuários só é registrado em `Development`.
-- Não há perfis de administrador ou permissões diferentes: qualquer usuário autenticado acessa o CRUD.
-- O e-mail recebe `Trim()`, mas não é normalizado para minúsculas. Use a mesma capitalização no cadastro e no login.
-- Não há recuperação de senha, confirmação de e-mail, paginação ou testes automatizados no repositório.
-- É uma aplicação de estudo local; proteção antiforgery/CSRF e configuração de implantação ainda não foram implementadas.
+
 
 ## Tecnologias e estrutura
 
@@ -93,7 +88,7 @@ CRUDConfeitaria/
 
 O SDK inclui os arquivos `.cs` automaticamente; não é necessário listá-los no `.csproj` nem criar um equivalente ao `__init__.py`. `bin/` e `obj/` são gerados e ignorados pelo Git.
 
-Para quem vem de Python: NuGet cumpre o papel de gerenciador de pacotes; DTOs lembram schemas do FastAPI; EF Core lembra o ORM do Django. Um `using` importa um namespace, mas não instala o pacote. A injeção de dependência entrega o `AppDbContext` ao parâmetro da rota. `async`/`await` permite aguardar operações de banco sem bloquear a thread durante a espera.
+Para quem vem de Python, como eu: NuGet cumpre o papel de gerenciador de pacotes; DTOs lembram schemas do FastAPI; EF Core lembra o ORM do Django. Um `using` importa um namespace, mas não instala o pacote. A injeção de dependência entrega o `AppDbContext` ao parâmetro da rota. `async`/`await` permite aguardar operações de banco sem bloquear a thread durante a espera.
 
 ## Configurar e executar
 
