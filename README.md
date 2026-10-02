@@ -12,7 +12,7 @@ Projeto acadêmico em C# com ASP.NET Core (.NET 10), Minimal APIs e PostgreSQL h
 - [Testar pelo PowerShell](#testar-pelo-powershell)
 - [Migrations](#migrations)
 - [Resolver problemas](#resolver-problemas)
-- [Tutorial de Git para o grupo](#tutorial-de-git-para-o-grupo)
+- [Tutorial de Git para o grupo](#tutorial-de-git-para-a-rapaziada)
 
 ## Funcionalidades e limites
 
