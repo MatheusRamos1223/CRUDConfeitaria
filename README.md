@@ -101,7 +101,7 @@ Todos os comandos abaixo são para **PowerShell**, executados na raiz do reposit
 
 ### 1. Pré-requisitos
 
-Instale o SDK do .NET 10, Git e um editor (Visual Studio ou VS Code). Tenha acesso a um projeto Supabase e à senha de seu banco.
+Instale o [SDK do .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0), o [Git](https://git-scm.com/downloads) e um editor (Visual Studio ou VS Code). Tenha acesso a um projeto Supabase e à senha de seu banco.
 
 ```powershell
 dotnet --list-sdks
@@ -111,6 +111,8 @@ git --version
 É necessário o SDK, não somente o runtime. Ter apenas .NET 8 não atende ao target `net10.0`.
 
 ### 2. Clonar e restaurar
+
+Abra um PowerShell na pasta onde deseja guardar o projeto, por exemplo `C:\Users\SeuUsuario\source\repos`. O `git clone` cria a pasta `CRUDConfeitaria`; o `cd` entra nela. Não execute o clone dentro de uma cópia já existente.
 
 ```powershell
 git clone https://github.com/MatheusRamos1223/CRUDConfeitaria.git
@@ -177,6 +179,27 @@ dotnet run --project MyCRUD/MyCRUD.csproj -- --urls http://localhost:5000
 Espere `Now listening on: http://localhost:5000`. Deixe esse terminal aberto e use outro para testes. `Ctrl+C` encerra a API. Antes de compilar novamente após mudar C#, encerre a instância antiga para liberar o executável. Salve o editor antes de executar comandos.
 
 `localhost` aponta para a sua própria máquina. Compartilhar esse endereço não disponibiliza a aplicação para os colegas em seus computadores.
+
+### 7. Primeiro acesso e confirmação
+
+Abra `http://localhost:5000/cadastro.html`, crie um usuário e depois entre em `http://localhost:5000/login.html`. O login abre a página de produtos. Cadastre um produto, edite, confira no Supabase e faça logout. Para confirmar persistência, reinicie a API e faça login novamente: os dados devem continuar disponíveis.
+
+Não existe usuário padrão criado automaticamente. A senha escolhida nesse formulário pertence ao usuário do aplicativo; não é a senha do PostgreSQL nem a senha da conta Supabase.
+
+Se usar o banco do grupo, os cadastros, edições e exclusões afetam os dados compartilhados. Um projeto Supabase separado permite testar sem alterar o banco dos colegas.
+
+### 8. Nas próximas execuções
+
+Clone, restore de ferramentas e configuração dos User Secrets são etapas de preparação. Com o ambiente já preparado, basta entrar na pasta e executar:
+
+```powershell
+cd C:\CAMINHO\CRUDConfeitaria
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+$env:DOTNET_ENVIRONMENT = "Development"
+dotnet run --project MyCRUD/MyCRUD.csproj -- --urls http://localhost:5000
+```
+
+Substitua o caminho. As variáveis precisam ser definidas novamente em um terminal novo. Se receber mudanças do Git, restaure dependências/ferramentas quando necessário e aplique migrations recebidas conforme combinado com o grupo.
 
 ## Usar pelo navegador
 
