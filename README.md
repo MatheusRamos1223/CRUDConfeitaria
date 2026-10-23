@@ -150,6 +150,62 @@ Cada integrante configura seu próprio segredo local. Ele não acompanha `git cl
 
 Se a senha tiver `;` ou outros caracteres especiais da string de conexão, o valor precisa ser corretamente delimitado conforme o formato Npgsql. Uma aspa simples dentro do comando PowerShell deve ser duplicada. Não cole comandos preenchidos com credenciais em commits, prints ou mensagens.
 
+### Configurar o acesso em OUTRA máquina
+
+**Clonar o repositório não copia a conexão do Supabase.** Mesmo usando a mesma conta GitHub, cada computador e usuário do Windows precisa configurar os próprios User Secrets. Não é necessário criar `appsettings.json`.
+
+O que obter com o responsável pelo banco, por um canal privado:
+
+| Dado | Onde encontrar / significado |
+| --- | --- |
+| Host | Painel do projeto Supabase, Connect, Session pooler |
+| Porta | A mostrada na conexão do Session pooler, normalmente 5432 |
+| Database | Nome do banco, normalmente `postgres` |
+| Username | Usuário completo, como `postgres.PROJECT_REF` |
+| Password | Senha do banco definida ao criar o projeto; não é a senha da conta Supabase nem do login do aplicativo |
+
+Se receber uma URI `postgresql://USUARIO:[YOUR-PASSWORD]@HOST:5432/postgres`, converta os campos para `Host=HOST;Port=5432;Database=postgres;Username=USUARIO;Password=SENHA_REAL;SSL Mode=Require`. Não mantenha `[YOUR-PASSWORD]` nem os outros placeholders no comando final.
+
+Depois de clonar e entrar na raiz `CRUDConfeitaria`, execute **na máquina nova**:
+
+```powershell
+dotnet restore MyCRUD/MyCRUD.csproj
+dotnet tool restore
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" 'Host=SEU_HOST;Port=5432;Database=postgres;Username=postgres.SEU_PROJECT_REF;Password=SUA_SENHA;SSL Mode=Require' --project MyCRUD/MyCRUD.csproj
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+$env:DOTNET_ENVIRONMENT = "Development"
+dotnet ef database update --project MyCRUD/MyCRUD.csproj
+dotnet run --project MyCRUD/MyCRUD.csproj -- --urls http://localhost:5000
+```
+
+Substitua os dados no comando `user-secrets set` antes de executar. Esse comando também pode corrigir/substituir uma conexão salva incorretamente. O `UserSecretsId` já está no `.csproj`: não rode `init` novamente nem altere esse identificador para configurar cada computador. Em banco compartilhado, coordene a aplicação de migrations; não gere novas migrations para apenas conectar outra máquina.
+
+Quando aparecer `Now listening on: http://localhost:5000`, abra `http://localhost:5000/cadastro.html` para criar uma conta do aplicativo, ou faça login com uma conta já existente nesse banco. A senha de login do aplicativo é diferente da senha de conexão PostgreSQL.
+
+### Onde a conexão fica salva?
+
+No Windows, o arquivo local deste projeto é:
+
+```text
+%APPDATA%\Microsoft\UserSecrets\f3047712-0f96-4bfe-be4e-903a46c50213\secrets.json
+```
+
+`%APPDATA%` representa a pasta de dados do usuário atual. Para abrir essa localização pelo Explorador de Arquivos, cole o caminho na barra de endereço. Não procure o arquivo dentro de `MyCRUD`, de `wwwroot` ou do GitHub.
+
+- `MyCRUD/MyCRUD.csproj` contém somente o `UserSecretsId`, que identifica o armazenamento local.
+- `Program.cs` usa `GetConnectionString("DefaultConnection")` para ler a chave `ConnectionStrings:DefaultConnection`.
+- A senha e o host reais ficam no `secrets.json` da máquina, salvo pelo comando `user-secrets set`.
+- Ao trocar de usuário do Windows ou de computador, esse arquivo não acompanha o projeto.
+
+Para conferir os valores localmente:
+
+```powershell
+dotnet user-secrets list --project MyCRUD/MyCRUD.csproj
+```
+
+**Esse comando exibe a senha do banco.** Não envie sua saída em prints, mensagens ou commits. Não é necessário executá-lo para iniciar a aplicação; serve apenas para conferir a configuração.
+
+Se aparecer `DefaultConnection não foi configurada`, confira o comando `set`, o nome exato da chave e o ambiente Development no mesmo terminal da aplicação. Se a conexão foi encontrada, mas houver erro de autenticação ou rede PostgreSQL, confira os dados de acesso e se o projeto Supabase está ativo. Para investigar um erro do `AppDbContext`, compartilhe apenas a mensagem, removendo credenciais.
 ### 5. Definir Development e aplicar migrations
 
 No terminal que executará a aplicação:
