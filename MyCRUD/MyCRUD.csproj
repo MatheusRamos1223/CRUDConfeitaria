@@ -1,11 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UserSecretsId>f3047712-0f96-4bfe-be4e-903a46c50213</UserSecretsId>
+
+    <!-- Gera o XML dos comentários /// e o OpenAPI usa esses textos na documentação. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: não exige comentário em TODO membro público (só nos que importam). -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,8 +18,9 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.*" />
+    <!-- Gera o documento OpenAPI (/openapi/v1.json) a partir dos endpoints. -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.*" />
+    <!-- Interface web interativa para ler e testar a API (/scalar). -->
+    <PackageReference Include="Scalar.AspNetCore" Version="2.*" />
   </ItemGroup>
-
-
-
 </Project>
