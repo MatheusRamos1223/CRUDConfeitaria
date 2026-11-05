@@ -1,0 +1,40 @@
+# Integração contínua (CI): a cada push ou pull request, o GitHub
+# compila o projeto em uma máquina limpa. Se algo quebrar, o PR fica vermelho
+# antes de chegar na branch principal.
+
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restaurar pacotes NuGet
+        run: dotnet restore MyCRUD.slnx
+
+      - name: Compilar
+        run: dotnet build MyCRUD.slnx --no-restore --configuration Release
+
+      - name: Restaurar ferramenta dotnet-ef
+        run: dotnet tool restore
+
+      # Confere se o modelo do AppDbContext bate com as migrations.
+      # Falha se alguém mudou uma entidade e esqueceu de gerar a migration.
+      # Não acessa banco: a string de conexão abaixo é fictícia, só para o Program.cs iniciar.
+      - name: Verificar migrations pendentes
+        env:
+          ConnectionStrings__DefaultConnection: "Host=localhost;Database=ci;Username=ci;Password=ci"
+        run: dotnet ef migrations has-pending-model-changes --project MyCRUD --no-build --configuration Release
