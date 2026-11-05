@@ -68,6 +68,7 @@
         <p><a href="/cadastro.html">Criar usuário</a></p>
     </main>
 
+    <script src="/js/api.js"></script>
     <script>const formulario = document.querySelector("#form-login");
         const mensagem = document.querySelector("#mensagem");
 
@@ -95,12 +96,11 @@
                     mensagem.textContent = "Login realizado!";
                     formulario.elements.senha.value = "";
                 } else if (resposta.status === 401) {
-                    mensagem.textContent = "E-mail ou senha inválidos."; // 
-
-
-
+                    // A API não diz se o erro foi no e-mail ou na senha, de propósito.
+                    mensagem.textContent = "E-mail ou senha inválidos.";
                 } else {
-                    mensagem.textContent = "Não foi possível entrar.";
+                    mensagem.textContent = await mensagemDeErro(
+                        resposta, "Não foi possível entrar.");
                 }
             } catch {
                 mensagem.textContent = "Não foi possível conectar ao servidor.";
