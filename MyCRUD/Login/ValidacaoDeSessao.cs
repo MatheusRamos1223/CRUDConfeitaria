@@ -50,8 +50,11 @@ public static class ValidacaoDeSessao
     public static async Task ValidarAsync(CookieValidatePrincipalContext contexto)
     {
         // IssuedUtc = quando o cookie foi emitido ou renovado pela última vez.
+        // O relógio é o mesmo do handler do cookie (Options.TimeProvider): os testes da
+        // Fase 3 podem trocá-lo por um relógio falso e "avançar" 5 min sem esperar.
+        var agora = (contexto.Options.TimeProvider ?? TimeProvider.System).GetUtcNow();
         var emitidoEm = contexto.Properties.IssuedUtc;
-        if (emitidoEm is { } emitido && DateTimeOffset.UtcNow - emitido < Intervalo)
+        if (emitidoEm is { } emitido && agora - emitido < Intervalo)
         {
             return;
         }

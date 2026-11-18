@@ -566,7 +566,7 @@ Testes previstos (cada um prova uma regra; nada de testar o EF):
 | Pedido criado e confirmado por usuários diferentes → `criadoPorNome` e `statusAlteradoPorNome` corretos; recém-criado com `statusAlteradoEm` nulo | R40 |
 | Entrega em hoje + 366 → 400 `errors.DataEntrega`; hoje + 365 → 201 | R39 |
 | `pagina=1000001` → 400 | R4 |
-| Usuário rebaixado por SQL (Admin → Operador) com cookie de mais de 5 min → 401 (relógio controlado por `TimeProvider` da opção do cookie, ou `IssuedUtc` antigo) | R35 |
+| Usuário rebaixado por SQL (Admin → Operador) com cookie de mais de 5 min → 401 (relógio falso em `CookieAuthenticationOptions.TimeProvider`, que `ValidacaoDeSessao` também usa) | R35 |
 | Cadastro com o e-mail de `Admin:Email` → 409 "E-mail já cadastrado." (fábrica em Development) | R42 |
 | `INSERT` por SQL com `"Preco" = 0` → violação `CK_Produtos_Preco`; com e-mail em maiúsculas → `CK_Clientes_Email` | R45 |
 
