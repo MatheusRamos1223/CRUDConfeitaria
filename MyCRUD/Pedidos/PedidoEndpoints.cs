@@ -129,7 +129,7 @@ public static class PedidoEndpoints
     // -----------------------------------------------------------------------
 
     private static async Task<Results<Created<PedidoDetalheDto>, ValidationProblem>> Criar(
-        CriarPedidoDto dto, AppDbContext db, CancellationToken ct)
+        CriarPedidoDto dto, ClaimsPrincipal user, AppDbContext db, CancellationToken ct)
     {
         // Chegando aqui, o ValidacaoFiltro já garantiu formato, 1–50 itens,
         // quantidades 1–999 e nenhum produto repetido.
@@ -138,9 +138,17 @@ public static class PedidoEndpoints
         var erros = new Dictionary<string, string[]>();
 
         // R21: "hoje" no fuso da confeitaria, não no do servidor.
-        if (dto.DataEntrega < Pedido.HojeNaConfeitaria())
+        // R39: no máximo 365 dias à frente (pega ano digitado errado, ex.: 2062).
+        var hoje = Pedido.HojeNaConfeitaria();
+
+        if (dto.DataEntrega < hoje)
         {
             erros[nameof(CriarPedidoDto.DataEntrega)] = ["A data de entrega não pode ser anterior a hoje."];
+        }
+        else if (dto.DataEntrega > hoje.AddDays(Pedido.AntecedenciaMaximaDias))
+        {
+            erros[nameof(CriarPedidoDto.DataEntrega)] =
+                [$"A data de entrega deve ser no máximo {Pedido.AntecedenciaMaximaDias} dias a partir de hoje."];
         }
 
         if (!await db.Clientes.AnyAsync(c => c.Id == dto.ClienteId, ct))
@@ -172,12 +180,14 @@ public static class PedidoEndpoints
             return TypedResults.ValidationProblem(erros, title: "Dados inválidos.");
         }
 
+        // CriadoEm NÃO é preenchido: DEFAULT now() no banco (R26). O EF omite a coluna
+        // no INSERT e lê o valor gerado de volta. Status Aberto também é o DEFAULT da coluna.
         var pedido = new Pedido
         {
             ClienteId = dto.ClienteId,
             DataEntrega = dto.DataEntrega,
             Status = StatusPedido.Aberto,          // R26
-            CriadoEm = DateTime.UtcNow,            // R26 (UTC; a tela converte para o fuso local)
+            CriadoPorId = user.ObterUsuarioId(),   // R40: autor vem do cookie, nunca do corpo
             Itens = dto.Itens
                 .Select(i => new ItemPedido
                 {
@@ -207,14 +217,14 @@ public static class PedidoEndpoints
     // -----------------------------------------------------------------------
 
     private static Task<Results<Ok<PedidoDetalheDto>, NotFound, ProblemHttpResult>> Confirmar(
-        int id, AppDbContext db, CancellationToken ct) =>
-        MudarStatusAsync(db, id, "confirmado", StatusPedido.Confirmado,
-            origem: StatusPedido.Aberto, ct: ct);
+        int id, ClaimsPrincipal user, AppDbContext db, ILoggerFactory loggerFactory, CancellationToken ct) =>
+        MudarStatusAsync(db, loggerFactory, id, user.ObterUsuarioId(), "confirmado", StatusPedido.Confirmado,
+            origens: [StatusPedido.Aberto], ct: ct);
 
     private static Task<Results<Ok<PedidoDetalheDto>, NotFound, ProblemHttpResult>> Entregar(
-        int id, AppDbContext db, CancellationToken ct) =>
-        MudarStatusAsync(db, id, "entregue", StatusPedido.Entregue,
-            origem: StatusPedido.Confirmado, ct: ct);
+        int id, ClaimsPrincipal user, AppDbContext db, ILoggerFactory loggerFactory, CancellationToken ct) =>
+        MudarStatusAsync(db, loggerFactory, id, user.ObterUsuarioId(), "entregue", StatusPedido.Entregue,
+            origens: [StatusPedido.Confirmado], ct: ct);
 
     /// <summary>
     /// Cancela o pedido. Aberto: qualquer usuário logado. Confirmado: só Admin (R30).
@@ -223,27 +233,30 @@ public static class PedidoEndpoints
     /// <para>
     /// Aqui a política <c>SomenteAdmin</c> no grupo não serve: a permissão depende do
     /// <b>status do pedido</b>, que só se conhece no banco. Por isso o papel é conferido
-    /// dentro do endpoint e entra na própria condição do UPDATE:
+    /// dentro do endpoint e decide de quais status o UPDATE pode partir:
     /// </para>
     /// <list type="bullet">
-    ///   <item>Admin: <c>WHERE "Status" IN ('Aberto','Confirmado')</c>.</item>
-    ///   <item>Operador: <c>WHERE "Status" = 'Aberto'</c>. Se nada mudar e o pedido estiver
+    ///   <item>Admin: <c>WHERE "Status" = 'Aberto'</c>; se nada mudar, <c>WHERE "Status" = 'Confirmado'</c>.</item>
+    ///   <item>Operador: só <c>WHERE "Status" = 'Aberto'</c>. Se nada mudar e o pedido estiver
     ///   Confirmado, a resposta é 403 (falta permissão), não 409.</item>
     /// </list>
     /// <para>
-    /// Conferir o papel e o status num único UPDATE evita a corrida "li Aberto, outro
+    /// Conferir o papel e o status no próprio UPDATE evita a corrida "li Aberto, outro
     /// usuário confirmou, eu cancelei um Confirmado sem ser Admin".
     /// </para>
     /// </remarks>
     private static Task<Results<Ok<PedidoDetalheDto>, NotFound, ProblemHttpResult>> Cancelar(
-        int id, ClaimsPrincipal user, AppDbContext db, CancellationToken ct)
+        int id, ClaimsPrincipal user, AppDbContext db, ILoggerFactory loggerFactory, CancellationToken ct)
     {
-        // O papel vem da claim ClaimTypes.Role gravada no cookie no login (R35).
+        // O papel vem da claim ClaimTypes.Role do cookie, revalidada no banco a cada 5 min (R35).
         var ehAdmin = user.IsInRole(nameof(Papel.Admin));
 
-        return MudarStatusAsync(db, id, "cancelado", StatusPedido.Cancelado,
-            origem: StatusPedido.Aberto,
-            outraOrigem: ehAdmin ? StatusPedido.Confirmado : null,
+        StatusPedido[] origens = ehAdmin
+            ? new[] { StatusPedido.Aberto, StatusPedido.Confirmado }
+            : new[] { StatusPedido.Aberto };
+
+        return MudarStatusAsync(db, loggerFactory, id, user.ObterUsuarioId(), "cancelado", StatusPedido.Cancelado,
+            origens,
             explicarRecusa: statusAtual => !ehAdmin && statusAtual == StatusPedido.Confirmado
                 ? TypedResults.Problem(
                     title: "Apenas Admin pode cancelar um pedido Confirmado.",
@@ -253,36 +266,39 @@ public static class PedidoEndpoints
     }
 
     /// <summary>
-    /// Aplica uma transição de status de forma atômica (R29).
+    /// Aplica uma transição de status de forma atômica (R29) e registra quem a fez (R40, R41).
     /// </summary>
     /// <remarks>
     /// <para>
     /// <b>Por que não "buscar, conferir o status e salvar"?</b> Entre a leitura e a gravação
     /// outro usuário pode mudar o pedido (ex.: dois cliques em "Confirmar" em telas diferentes).
-    /// Em vez disso, a conferência vai DENTRO do UPDATE:
+    /// Em vez disso, a conferência vai DENTRO do UPDATE, uma origem por vez:
     /// </para>
     /// <code>
-    /// UPDATE "Pedidos" SET "Status" = 'Confirmado'
-    /// WHERE "Id" = @id AND ("Status" = 'Aberto' OR "Status" = @outraOrigem)
+    /// UPDATE "Pedidos"
+    /// SET "Status" = 'Confirmado', "StatusAlteradoEm" = @agora, "StatusAlteradoPorId" = @usuario
+    /// WHERE "Id" = @id AND "Status" = 'Aberto'
     /// </code>
     /// <para>
-    /// O banco executa isso de uma vez só. Se 1 linha mudou, a transição valeu.
-    /// Se 0 linhas mudaram, uma consulta curta descobre o motivo:
+    /// O banco executa cada UPDATE de uma vez só. Se 1 linha mudou, a transição valeu e a
+    /// origem é exatamente a do <c>WHERE</c> — por isso o log de auditoria sabe de onde o pedido
+    /// saiu sem uma leitura extra (que poderia estar desatualizada). Com duas origens (cancelar
+    /// como Admin), tenta-se uma e depois a outra; status nunca volta para Aberto, então a
+    /// segunda tentativa não "pula" uma mudança.
+    /// </para>
+    /// <para>
+    /// Se nenhuma origem mudou nada, uma consulta curta descobre o motivo:
     /// pedido inexistente → 404; status atual não permite → 409 (ou o que
     /// <paramref name="explicarRecusa"/> decidir, como o 403 do cancelamento).
     /// </para>
-    /// <para>
-    /// As origens viram comparações <c>=</c> com OR (no máximo duas) em vez de
-    /// <c>lista.Contains(...)</c>: assim o SQL é simples e o conversor enum → texto
-    /// é aplicado a cada parâmetro sem depender de como o provedor traduz listas.
-    /// </para>
     /// </remarks>
     /// <param name="db">Contexto do banco.</param>
+    /// <param name="loggerFactory">Cria o logger da transição (classe estática não tem <c>ILogger&lt;T&gt;</c>).</param>
     /// <param name="id">Pedido a alterar.</param>
+    /// <param name="usuarioId">Quem está fazendo a transição (claim do cookie).</param>
     /// <param name="acao">Particípio usado na mensagem 409 ("Pedido Entregue não pode ser <b>cancelado</b>.").</param>
     /// <param name="destino">Novo status.</param>
-    /// <param name="origem">Status de onde a transição pode partir.</param>
-    /// <param name="outraOrigem">Segundo status de origem aceito, se houver.</param>
+    /// <param name="origens">Status de onde a transição pode partir, na ordem em que são tentados.</param>
     /// <param name="explicarRecusa">
     /// Opcional: recebe o status atual quando nada mudou e devolve uma resposta específica,
     /// ou <c>null</c> para usar o 409 padrão.
@@ -290,28 +306,41 @@ public static class PedidoEndpoints
     /// <param name="ct">Cancelamento da requisição.</param>
     private static async Task<Results<Ok<PedidoDetalheDto>, NotFound, ProblemHttpResult>> MudarStatusAsync(
         AppDbContext db,
+        ILoggerFactory loggerFactory,
         int id,
+        int usuarioId,
         string acao,
         StatusPedido destino,
-        StatusPedido origem,
-        StatusPedido? outraOrigem = null,
+        StatusPedido[] origens,
         Func<StatusPedido, ProblemHttpResult?>? explicarRecusa = null,
         CancellationToken ct = default)
     {
-        // Sem segunda origem, repete a primeira: a condição continua correta.
-        var origemAlternativa = outraOrigem ?? origem;
+        // Tipos anuláveis explícitos: as colunas são "timestamptz NULL" e "integer NULL".
+        DateTime? agora = DateTime.UtcNow;
+        int? alteradoPor = usuarioId;
 
-        // ExecuteUpdateAsync (EF Core 7+) gera um UPDATE direto no banco, sem carregar
-        // a entidade. Devolve o número de linhas afetadas. No EF Core 10 o argumento é
-        // um "construtor de setters": cada SetProperty vira um "SET coluna = valor".
-        var alterados = await db.Pedidos
-            .Where(p => p.Id == id && (p.Status == origem || p.Status == origemAlternativa))
-            .ExecuteUpdateAsync(setters => setters.SetProperty(p => p.Status, destino), ct);
-
-        if (alterados == 1)
+        foreach (var origem in origens)
         {
-            var detalhe = await BuscarDetalheAsync(db, id, ct);
-            return detalhe is null ? TypedResults.NotFound() : TypedResults.Ok(detalhe);
+            // ExecuteUpdateAsync (EF Core 7+) gera um UPDATE direto no banco, sem carregar
+            // a entidade, e devolve o número de linhas afetadas. No EF Core 10 o argumento é
+            // um "construtor de setters": cada SetProperty vira um "SET coluna = valor".
+            var alterados = await db.Pedidos
+                .Where(p => p.Id == id && p.Status == origem)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(p => p.Status, destino)
+                    .SetProperty(p => p.StatusAlteradoEm, agora)
+                    .SetProperty(p => p.StatusAlteradoPorId, alteradoPor), ct);
+
+            if (alterados == 1)
+            {
+                // R41: trilha de auditoria no log, só com Ids e status (nenhum dado pessoal).
+                loggerFactory.CreateLogger(typeof(PedidoEndpoints)).LogInformation(
+                    "Pedido {PedidoId}: {Origem} -> {Destino} por usuário {UsuarioId}.",
+                    id, origem, destino, usuarioId);
+
+                var detalhe = await BuscarDetalheAsync(db, id, ct);
+                return detalhe is null ? TypedResults.NotFound() : TypedResults.Ok(detalhe);
+            }
         }
 
         // Nada mudou: o pedido não existe ou está num status que não permite a ação.
@@ -343,7 +372,9 @@ public static class PedidoEndpoints
     /// </summary>
     /// <remarks>
     /// O <c>Select</c> faz o banco devolver só as colunas necessárias, já com os joins de
-    /// cliente e produto (nome ATUAL, R32) e com subtotal e total calculados (R25).
+    /// cliente, produto (nome ATUAL, R32) e usuários da auditoria (R40), e com subtotal e
+    /// total calculados (R25). <c>StatusAlteradoPor</c> é opcional: vira LEFT JOIN e o nome
+    /// sai <c>null</c> enquanto o pedido nunca mudou de status.
     /// Os itens saem na ordem em que foram gravados (<c>Id</c>).
     /// </remarks>
     private static Task<PedidoDetalheDto?> BuscarDetalheAsync(AppDbContext db, int id, CancellationToken ct) =>
@@ -358,6 +389,9 @@ public static class PedidoEndpoints
                 p.DataEntrega,
                 p.Status,
                 p.CriadoEm,
+                p.CriadoPor!.Nome,
+                p.StatusAlteradoEm,
+                p.StatusAlteradoPor == null ? null : p.StatusAlteradoPor.Nome,
                 p.Itens
                     .OrderBy(i => i.Id)
                     .Select(i => new ItemPedidoRespostaDto(

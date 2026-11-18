@@ -8,6 +8,7 @@
 // Se o campo não existe no DTO, o cliente da API não tem como forjá-lo.
 
 using System.ComponentModel.DataAnnotations;
+using MyCRUD.Clientes;
 using MyCRUD.Compartilhado;
 
 namespace MyCRUD.Pedidos;
@@ -26,11 +27,11 @@ namespace MyCRUD.Pedidos;
 /// </para>
 /// <para>
 /// Regras que dependem do banco ou do relógio (cliente existe, produto ativo,
-/// data ≥ hoje) ficam no endpoint, que devolve o mesmo formato de erro (400 por campo).
+/// data entre hoje e hoje + 365 dias) ficam no endpoint, que devolve o mesmo formato de erro (400 por campo).
 /// </para>
 /// </remarks>
 /// <param name="ClienteId">Cliente que fez a encomenda. Deve existir.</param>
-/// <param name="DataEntrega">Dia da entrega (<c>"2026-11-20"</c>). Hoje ou depois, no fuso de São Paulo.</param>
+/// <param name="DataEntrega">Dia da entrega (<c>"2026-11-20"</c>). De hoje até hoje + 365 dias, no fuso de São Paulo.</param>
 /// <param name="Itens">De 1 a 50 itens, sem produto repetido.</param>
 public record CriarPedidoDto(
     [property: Range(1, int.MaxValue, ErrorMessage = "Selecione o cliente.")]
@@ -120,6 +121,10 @@ public record PedidoResumoDto(
     decimal Total);
 
 /// <summary>Pedido completo (<c>GET /pedidos/{id}</c>, criação e transições de status).</summary>
+/// <remarks>
+/// Os campos de auditoria (R40) trazem o <b>nome atual</b> do usuário, não o Id:
+/// a tela mostra "Criado por Ana em 18/11 14:05" sem uma segunda consulta.
+/// </remarks>
 /// <param name="Id">Número do pedido.</param>
 /// <param name="ClienteId">Identificador do cliente.</param>
 /// <param name="ClienteNome">Nome atual do cliente.</param>
@@ -127,6 +132,9 @@ public record PedidoResumoDto(
 /// <param name="DataEntrega">Dia da entrega.</param>
 /// <param name="Status">Situação atual.</param>
 /// <param name="CriadoEm">Momento da criação (UTC) — quando os preços foram congelados.</param>
+/// <param name="CriadoPorNome">Nome de quem criou o pedido.</param>
+/// <param name="StatusAlteradoEm">Momento (UTC) da última mudança de status; <c>null</c> se nunca mudou.</param>
+/// <param name="StatusAlteradoPorNome">Nome de quem fez a última mudança de status; <c>null</c> se nunca mudou.</param>
 /// <param name="Itens">Itens com preço congelado e subtotal.</param>
 /// <param name="Total">Σ dos subtotais.</param>
 public record PedidoDetalheDto(
@@ -137,6 +145,9 @@ public record PedidoDetalheDto(
     DateOnly DataEntrega,
     StatusPedido Status,
     DateTime CriadoEm,
+    string CriadoPorNome,
+    DateTime? StatusAlteradoEm,
+    string? StatusAlteradoPorNome,
     IReadOnlyList<ItemPedidoRespostaDto> Itens,
     decimal Total);
 
@@ -160,19 +171,25 @@ public record ItemPedidoRespostaDto(
 /// Ligado à query string com <c>[AsParameters]</c>: cada parâmetro do record vira
 /// um parâmetro da URL com o mesmo nome. Campos vazios são ignorados.
 /// </remarks>
-/// <param name="Busca">Parte do nome do cliente (contém, sem diferenciar maiúsculas).</param>
+/// <param name="Busca">Parte do nome do cliente (contém, sem diferenciar maiúsculas). Até 120 caracteres.</param>
 /// <param name="Status">Só pedidos neste status (<c>Aberto</c>, <c>Confirmado</c>...).</param>
 /// <param name="De">Entrega a partir deste dia (inclusive).</param>
 /// <param name="Ate">Entrega até este dia (inclusive).</param>
-/// <param name="Pagina">Página pedida, a partir de 1.</param>
+/// <param name="Pagina">Página pedida, de 1 a <see cref="Paginacao.PaginaMaxima"/>.</param>
 /// <param name="Tamanho">Itens por página, de 1 a 100.</param>
 public record FiltroPedidos(
+    // Ninguém tem nome de cliente maior que a coluna: termo maior só gastaria o banco.
+    [property: MaxLength(Cliente.NomeTamanhoMaximo, ErrorMessage = "A busca deve ter no máximo {1} caracteres.")]
     string? Busca,
+
+    // EnumDataType recusa números fora do enum (ex.: ?status=7), que o binding aceitaria.
+    [property: EnumDataType(typeof(StatusPedido), ErrorMessage = "Status inválido. Use Aberto, Confirmado, Entregue ou Cancelado.")]
     StatusPedido? Status,
+
     DateOnly? De,
     DateOnly? Ate,
 
-    [property: Range(1, int.MaxValue, ErrorMessage = "A página deve ser 1 ou maior.")]
+    [property: Range(1, Paginacao.PaginaMaxima, ErrorMessage = "A página deve estar entre {1} e {2}.")]
     int Pagina = 1,
 
     [property: Range(1, Paginacao.TamanhoMaximo, ErrorMessage = "O tamanho da página deve estar entre {1} e {2}.")]
