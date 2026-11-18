@@ -66,6 +66,7 @@ function desenharPedido(pedido) {
     document.querySelector("#criado-em").textContent = formatarDataHora(pedido.criadoEm);
 
     desenharResumo(pedido);
+    desenharAuditoria(pedido);
     desenharLinhaDoTempo(pedido.status);
     desenharItens(pedido);
     desenharAcoes(pedido.status);
@@ -93,6 +94,32 @@ function desenharResumo(pedido) {
         bloco.append(dt, dd);
         resumo.appendChild(bloco);
     }
+}
+
+/**
+ * Quem fez o quê: "Criado por X em …" e "Último status por Y em …".
+ * Campos do PedidoDetalheDto: criadoPorNome, criadoEm, statusAlteradoPorNome e
+ * statusAlteradoEm (ISO UTC; null enquanto o pedido nunca mudou de status).
+ * Pedidos antigos podem não ter autor gravado: aí mostra só a data.
+ */
+function desenharAuditoria(pedido) {
+    const criacao = document.querySelector("#auditoria-criacao");
+    const quando = formatarDataHora(pedido.criadoEm);
+    criacao.textContent = pedido.criadoPorNome
+        ? `Criado por ${pedido.criadoPorNome} em ${quando}`
+        : `Criado em ${quando}`;
+
+    const ultimoStatus = document.querySelector("#auditoria-status");
+    ultimoStatus.hidden = !pedido.statusAlteradoEm;
+    if (!pedido.statusAlteradoEm) {
+        ultimoStatus.textContent = "";
+        return;
+    }
+
+    const quandoStatus = formatarDataHora(pedido.statusAlteradoEm);
+    ultimoStatus.textContent = pedido.statusAlteradoPorNome
+        ? `Último status por ${pedido.statusAlteradoPorNome} em ${quandoStatus}`
+        : `Último status em ${quandoStatus}`;
 }
 
 /**

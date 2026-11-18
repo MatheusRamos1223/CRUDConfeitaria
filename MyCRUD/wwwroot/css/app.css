@@ -379,6 +379,17 @@ input[readonly] { background: var(--creme); }
 /* Resumo do pedido ocupa a posição da barra de filtro no esqueleto da página. */
 .area-filtro { grid-area: filtro; }
 
+/* "Criado por X em …" / "Último status por Y em …" (quem fez o quê, R-auditoria). */
+.auditoria {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 24px;
+    margin: 0;
+    padding: 0 16px 14px;
+    font-size: .85rem;
+    color: var(--texto-suave);
+}
+
 .resumo {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));

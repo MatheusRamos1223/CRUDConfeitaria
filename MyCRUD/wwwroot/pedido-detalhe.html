@@ -23,6 +23,11 @@
         <section class="cartao area-filtro" aria-label="Resumo do pedido">
             <dl class="resumo" id="resumo"></dl>
             <div class="linha-do-tempo" id="linha-do-tempo"></div>
+            <!-- Quem criou e quem mudou o status por último (CriadoPor / StatusAlteradoPor). -->
+            <p class="auditoria">
+                <span id="auditoria-criacao"></span>
+                <span id="auditoria-status" hidden></span>
+            </p>
         </section>
 
         <!-- 2. Lista de itens (somente leitura: preço congelado na criação) -->
