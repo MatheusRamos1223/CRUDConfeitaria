@@ -2,6 +2,7 @@
 // Aqui fica a "composição" do sistema: quais serviços existem (injeção de dependência)
 // e em que ordem cada requisição HTTP passa pelos middlewares (pipeline).
 
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using MyCRUD.Compartilhado;
@@ -81,6 +82,12 @@ builder.Services.AddLimiteDeRequisicoes();
 // 5. Documentação OpenAPI (contrato da API, exibido pela interface Scalar)
 // ---------------------------------------------------------------------------
 builder.Services.AddOpenApi();
+
+// ---------------------------------------------------------------------------
+// 6. JSON: enums trafegam como texto ("Aberto", "Admin") em vez de números
+// ---------------------------------------------------------------------------
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var app = builder.Build();
 
