@@ -21,7 +21,8 @@ namespace MyCRUD.Compartilhado;
 /// </para>
 /// <para>
 /// A política lê a claim <c>ClaimTypes.Role</c> gravada no cookie durante o login.
-/// Por isso, uma mudança de papel só vale depois que o usuário sai e entra de novo.
+/// A cada 5 min o cookie é conferido no banco (<c>Login.ValidacaoDeSessao</c>): se o papel
+/// mudou, a sessão é encerrada e o usuário entra de novo já com o papel atual.
 /// </para>
 /// <para>
 /// Esconder botões na tela (classe <c>so-admin</c>) é apenas conforto visual:
