@@ -20,7 +20,9 @@ public class CadastroDoAdminTests(ApiFactoryDevelopment fabrica) : IClassFixture
         var cliente = fabrica.NovoClienteHttp();
 
         var resposta = await cliente.PostAsJsonAsync(
-            "/login/cadastro", new CriarUsuarioDto($"Intruso {Cenario.Sufixo()}", email.Trim(), Cenario.SenhaPadrao), Cenario.Json);
+            // Sem Trim: o e-mail vai como veio, para provar que a API normaliza (espaços e maiúsculas).
+            // [EmailAddress] aceita espaços nas pontas (só confere um único '@' no meio).
+            "/login/cadastro", new CriarUsuarioDto($"Intruso {Cenario.Sufixo()}", email, Cenario.SenhaPadrao), Cenario.Json);
 
         Assert.Equal(HttpStatusCode.Conflict, resposta.StatusCode);
         var problema = await resposta.LerProblem();

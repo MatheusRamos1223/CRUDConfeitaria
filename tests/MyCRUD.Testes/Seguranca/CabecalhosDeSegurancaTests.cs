@@ -8,8 +8,13 @@ namespace MyCRUD.Testes.Seguranca;
 
 public class CabecalhosDeSegurancaTests(ApiFactoryDevelopment fabrica) : IClassFixture<ApiFactoryDevelopment>
 {
+    // O HttpClient separa cabeçalhos "de resposta" e "de conteúdo"; procura nos dois para o
+    // teste não depender de em qual coleção o TestServer colocou o cabeçalho.
     private static string Valor(HttpResponseMessage resposta, string nome) =>
-        resposta.Headers.TryGetValues(nome, out var valores) ? string.Join(",", valores) : string.Empty;
+        resposta.Headers.TryGetValues(nome, out var valores)
+            || resposta.Content.Headers.TryGetValues(nome, out valores)
+            ? string.Join(",", valores)
+            : string.Empty;
 
     [Fact]
     public async Task R43_LoginHtml_TemCspNosniffEXFrameOptions()
