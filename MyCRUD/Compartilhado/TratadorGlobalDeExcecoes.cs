@@ -17,9 +17,15 @@ namespace MyCRUD.Compartilhado;
 ///   <item><term><see cref="BadHttpRequestException"/></term><description>400 — JSON malformado, tipo errado no corpo.</description></item>
 ///   <item><term>Violação de índice único no PostgreSQL</term><description>409 — ex.: dois cadastros simultâneos com o mesmo e-mail.</description></item>
 ///   <item><term>Violação de chave estrangeira no PostgreSQL</term><description>409 — ex.: categoria excluída enquanto outro usuário ligava um produto a ela (R7).</description></item>
+///   <item><term>Violação de CHECK no PostgreSQL</term><description>400 — um valor passou pela validação da API mas não pelas regras do banco (ex.: e-mail com letra que o <c>lower()</c> do banco converte diferente do .NET). Repetir a mesma requisição não resolve, por isso 400 e não 409.</description></item>
 ///   <item><term>Qualquer outra</term><description>500 — registrada no log com stack trace.</description></item>
 /// </list>
-/// A mensagem técnica (<c>detail</c>) só aparece em Development.
+/// <para>A mensagem técnica (<c>detail</c>) só aparece em Development.</para>
+/// <para>
+/// <b>Log das recusas (4xx):</b> só tipo da exceção, status e código SQLSTATE — nunca
+/// <c>exception.Message</c>. A mensagem do PostgreSQL inclui o valor recusado
+/// (<c>Key ("Email")=(ana@x.com) already exists</c>), e log não é lugar de dado pessoal.
+/// </para>
 /// </remarks>
 public sealed class TratadorGlobalDeExcecoes(
     IProblemDetailsService problemDetailsService,
@@ -48,6 +54,10 @@ public sealed class TratadorGlobalDeExcecoes(
             (_, PostgresErrorCodes.ForeignKeyViolation) =>
                 (StatusCodes.Status409Conflict, "Registro em uso."),
 
+            // 23514: um CHECK do banco recusou o valor (ex.: CK_Clientes_Email, CK_Produtos_Preco).
+            (_, PostgresErrorCodes.CheckViolation) =>
+                (StatusCodes.Status400BadRequest, "Dados recusados por uma regra do banco."),
+
             _ => (StatusCodes.Status500InternalServerError, "Erro interno no servidor.")
         };
 
@@ -58,8 +68,14 @@ public sealed class TratadorGlobalDeExcecoes(
         }
         else
         {
-            logger.LogWarning("Requisição recusada com {Status}: {Mensagem}",
-                status, exception.Message);
+            // Sem exception.Message: ela pode conter o valor recusado (e-mail, nome...).
+            logger.LogWarning(
+                "Requisição recusada com {Status} ({TipoExcecao}, SQLSTATE {SqlState}) em {Metodo} {Caminho}",
+                status,
+                exception.GetType().Name,
+                ErroDoPostgres(exception)?.SqlState,
+                httpContext.Request.Method,
+                httpContext.Request.Path);
         }
 
         httpContext.Response.StatusCode = status;

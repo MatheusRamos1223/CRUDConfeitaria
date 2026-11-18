@@ -195,8 +195,9 @@ public static class LoginEndpoints
     /// Usado pelas páginas HTML para saber se ainda há sessão ativa e qual o papel.
     /// </summary>
     /// <remarks>
-    /// Como vem do cookie, o papel é o do momento do login: uma promoção feita
-    /// depois só aparece quando o usuário sair e entrar de novo.
+    /// Como vem do cookie, o papel é o do momento do login. A cada 5 min o cookie é
+    /// conferido no banco (<see cref="ValidacaoDeSessao"/>): se o papel mudou ou o usuário
+    /// foi apagado, a sessão é encerrada e esta rota passa a devolver 401.
     /// </remarks>
     private static Ok<UsuarioRespostaDto> UsuarioAtual(ClaimsPrincipal user)
     {
@@ -213,21 +214,28 @@ public static class LoginEndpoints
     }
 
     private static async Task<Results<Created<UsuarioRespostaDto>, ProblemHttpResult>> Cadastrar(
-        CriarUsuarioDto dto, AppDbContext db)
+        CriarUsuarioDto dto, AppDbContext db, IConfiguration configuracao)
     {
         var email = Usuario.NormalizarEmail(dto.Email);
 
+        // R42: o e-mail de Admin:Email não pode ser cadastrado por aqui. Sem esta regra,
+        // quem chegasse primeiro ao formulário com esse e-mail viraria Admin no login.
+        // A resposta é a MESMA do e-mail duplicado: não revela qual e-mail é o do Admin.
+        var emailAdmin = configuracao[ChaveEmailAdmin];
+        var ehEmailDoAdmin = !string.IsNullOrWhiteSpace(emailAdmin)
+            && email == Usuario.NormalizarEmail(emailAdmin);
+
         // Verificação amigável. Se dois cadastros iguais chegarem ao mesmo tempo,
         // o índice único do banco barra o segundo e o TratadorGlobalDeExcecoes devolve 409.
-        if (await db.Usuarios.AnyAsync(u => u.Email == email))
+        if (ehEmailDoAdmin || await db.Usuarios.AnyAsync(u => u.Email == email))
         {
             return TypedResults.Problem(
                 title: "E-mail já cadastrado.",
                 statusCode: StatusCodes.Status409Conflict);
         }
 
-        // Cadastro SEMPRE cria Operador. Quem usar o e-mail de Admin:Email
-        // só vira Admin no login, depois de provar a senha.
+        // Cadastro SEMPRE cria Operador (R37). O usuário do Admin:Email não passa por aqui:
+        // ele é criado pelo seed de demonstração ou já existia antes de o e-mail ser configurado.
         var usuario = new Usuario
         {
             Nome = dto.Nome.Trim(),
