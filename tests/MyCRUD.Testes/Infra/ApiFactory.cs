@@ -134,6 +134,11 @@ internal static class PostgresCompartilhado
 
     public static async Task<string> CriarBancoAsync()
     {
+        var nome = $"teste_{Guid.NewGuid():N}";
+        string stringBase;
+
+        // A trava cobre também o CREATE DATABASE: as coleções rodam em paralelo e CREATE DATABASE
+        // simultâneos copiando o template1 podem falhar ("source database is being accessed").
         await Trava.WaitAsync();
         try
         {
@@ -143,22 +148,19 @@ internal static class PostgresCompartilhado
                 await container.StartAsync();
                 _container = container;
             }
+
+            stringBase = _container.GetConnectionString();
+
+            await using var conexao = new NpgsqlConnection(stringBase);
+            await conexao.OpenAsync();
+            await using var comando = new NpgsqlCommand($"CREATE DATABASE \"{nome}\"", conexao);
+            await comando.ExecuteNonQueryAsync();
         }
         finally
         {
             Trava.Release();
         }
 
-        var nome = $"teste_{Guid.NewGuid():N}";
-
-        await using (var conexao = new NpgsqlConnection(_container.GetConnectionString()))
-        {
-            await conexao.OpenAsync();
-            await using var comando = new NpgsqlCommand($"CREATE DATABASE \"{nome}\"", conexao);
-            await comando.ExecuteNonQueryAsync();
-        }
-
-        return new NpgsqlConnectionStringBuilder(_container.GetConnectionString()) { Database = nome }
-            .ConnectionString;
+        return new NpgsqlConnectionStringBuilder(stringBase) { Database = nome }.ConnectionString;
     }
 }
