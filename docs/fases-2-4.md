@@ -9,7 +9,7 @@ Ordem do documento: **telas primeiro**, regras derivadas delas, depois o contrat
 | Seção | Conteúdo |
 | --- | --- |
 | [0](#0-decisões-e-dúvidas) | Decisões do arquiteto e dúvidas que só o dono resolve |
-| [1](#1-telas) | Padrão de tela e as 5 telas (protótipos em `MyCRUD/wwwroot/prototipos/`) |
+| [1](#1-telas) | Padrão de tela e as 5 telas (prints dos protótipos em `docs/img/prototipos/`) |
 | [2](#2-fase-2--domínio) | Fase 2: entidades, DTOs, rotas, regras R1–R47, status, migrations, riscos |
 | [3](#3-divisão-de-trabalho-fase-2) | Divisão de trabalho Fase 2 (A2–A5 + integrador) |
 | [4](#4-fase-3--qualidade) | Fase 3: testes de integração, CI com Testcontainers, seed de demo |
@@ -44,7 +44,7 @@ Ordem do documento: **telas primeiro**, regras derivadas delas, depois o contrat
 | Q2 | Pedido pode ter data de entrega **no passado** (registrar venda já feita)? | **Decidido (dono):** não; só o seed de demo grava datas passadas. |
 | Q3 | Telefone deve ser **único** entre clientes? | **Decidido (dono):** não único. |
 | Q4 | Quem roda `dotnet ef migrations add`? O ambiente dos agentes não tem .NET. | **Decidido (dono):** integrador escreve migration + snapshot à mão; CI valida com `has-pending-model-changes`; se divergir, dono roda `dotnet ef` local. |
-| Q5 | Protótipos (`wwwroot/prototipos/`) saem do repositório na Fase 4? | **Padrão adotado:** sim, na Fase 4; screenshots ficam na documentação. |
+| Q5 | Protótipos (`wwwroot/prototipos/`) saem do repositório na Fase 4? | **Feito na Fase 2:** HTML removido (quebrava com a CSP); prints em `docs/img/prototipos/`. |
 
 ---
 
@@ -88,7 +88,7 @@ Screenshots 1280 px dos protótipos: `doc-build/img/proto_<nome>.png` (fora do r
 
 ### 1.2 Telas
 
-#### T1 — Produtos (`produtos.html`) · protótipo `prototipos/produtos.html` (visão Admin, editando)
+#### T1 — Produtos (`produtos.html`) · protótipo [`proto_produtos.png`](img/prototipos/proto_produtos.png) (visão Admin, editando)
 
 | Bloco | Conteúdo |
 | --- | --- |
@@ -98,7 +98,7 @@ Screenshots 1280 px dos protótipos: `doc-build/img/proto_<nome>.png` (fora do r
 | Ações | Cadastrar / Salvar alterações · Cancelar (só em edição) |
 | Regras derivadas | R4–R6, R12–R17 |
 
-#### T2 — Categorias (`categorias.html`) · protótipo `prototipos/categorias.html` (visão Admin)
+#### T2 — Categorias (`categorias.html`) · protótipo [`proto_categorias.png`](img/prototipos/proto_categorias.png) (visão Admin)
 
 | Bloco | Conteúdo |
 | --- | --- |
@@ -108,7 +108,7 @@ Screenshots 1280 px dos protótipos: `doc-build/img/proto_<nome>.png` (fora do r
 | Ações | Cadastrar / Salvar · Cancelar |
 | Regras derivadas | R8–R11 |
 
-#### T3 — Clientes (`clientes.html`) · protótipo `prototipos/clientes.html` (visão Operador)
+#### T3 — Clientes (`clientes.html`) · protótipo [`proto_clientes.png`](img/prototipos/proto_clientes.png) (visão Operador)
 
 | Bloco | Conteúdo |
 | --- | --- |
@@ -118,7 +118,7 @@ Screenshots 1280 px dos protótipos: `doc-build/img/proto_<nome>.png` (fora do r
 | Ações | Cadastrar / Salvar · Cancelar |
 | Regras derivadas | R18–R20 |
 
-#### T4 — Pedidos (`pedidos.html`) · protótipo `prototipos/pedidos.html` (visão Operador)
+#### T4 — Pedidos (`pedidos.html`) · protótipo [`proto_pedidos.png`](img/prototipos/proto_pedidos.png) (visão Operador)
 
 | Bloco | Conteúdo |
 | --- | --- |
@@ -128,7 +128,7 @@ Screenshots 1280 px dos protótipos: `doc-build/img/proto_<nome>.png` (fora do r
 | Ações | Criar pedido · Limpar. Sucesso → abre o detalhe do pedido criado. |
 | Regras derivadas | R21–R27 |
 
-#### T5 — Detalhe do pedido (`pedido-detalhe.html?id=N`) · protótipo `prototipos/pedido-detalhe.html` (visão Admin)
+#### T5 — Detalhe do pedido (`pedido-detalhe.html?id=N`) · protótipo [`proto_pedido-detalhe.png`](img/prototipos/proto_pedido-detalhe.png) (visão Admin)
 
 Mesmo esqueleto, largura total (`.pagina-larga`): o lugar da barra de filtro mostra o **resumo**, a lista mostra os **itens**, as **ações** são as transições.
 
@@ -607,6 +607,6 @@ Novo job `testes` em `.github/workflows/build.yml`, depois de `build`: `dotnet t
 | `docs/telas.md` | Screenshots das telas **reais** (Admin e Operador) com o fluxo de um pedido |
 | `docs/apresentacao.md` | Roteiro de 10 min: problema → arquitetura → demo Operador (cliente → pedido → confirmar) → demo Admin (cancelar, desativar produto, categoria) → testes/CI → decisões; perguntas prováveis da banca |
 | Documento FATEC (`doc-build`) | Capítulos novos: modelo de dados, regras, telas, testes |
-| Limpeza | Remover `wwwroot/prototipos/` (Q5) |
+| Limpeza | ~~Remover `wwwroot/prototipos/`~~ feito na Fase 2 (Q5) |
 
 Riscos: screenshots desatualizados se a tela mudar depois — gerar por script (Playwright) no fim da fase, não à mão.

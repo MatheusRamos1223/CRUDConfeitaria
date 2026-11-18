@@ -117,7 +117,6 @@ CRUDConfeitaria/
         ├── clientes.html
         ├── produtos.html
         ├── categorias.html
-        └── prototipos/           # protótipos estáticos (saem na Fase 4)
 ```
 
 `Program.cs` registra banco, autenticação, autorização, Problem Details, rate limiting e OpenAPI, define a ordem do pipeline e chama os métodos de registro dos endpoints. `Compartilhado/` reúne o que todas as funcionalidades usam: validação, tratamento de exceções, limite de requisições, paginação, filtro de texto e políticas de acesso. `AppDbContext` expõe `Produtos`, `Usuarios`, `Categorias`, `Clientes`, `Pedidos` e `ItensPedido` e configura tamanhos de coluna, preços `numeric(10,2)`, enums como texto, chaves estrangeiras, `CHECK` e índices. As entidades representam os registros; os DTOs descrevem entrada/saída e suas regras. A API nunca devolve entidades, apenas DTOs de resposta.
