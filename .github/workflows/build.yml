@@ -44,6 +44,8 @@ jobs:
   testes:
     runs-on: ubuntu-latest
     needs: build
+    # Um teste travado (ex.: contêiner que não sobe) não deve prender o runner por 6 h (padrão).
+    timeout-minutes: 20
 
     steps:
       - name: Baixar o código
