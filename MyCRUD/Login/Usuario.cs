@@ -24,6 +24,12 @@ public class Usuario
     /// </summary>
     public const int SenhaTamanhoMaximo = 128;
 
+    /// <summary>
+    /// Tamanho da coluna <c>Papel</c> (<c>varchar(20)</c>). Sobra espaço para
+    /// papéis futuros sem precisar de migration só para aumentar a coluna.
+    /// </summary>
+    public const int PapelTamanhoMaximo = 20;
+
     public int Id { get; set; }
 
     public string Nome { get; set; } = string.Empty;
@@ -34,11 +40,21 @@ public class Usuario
     public string SenhaHash { get; set; } = string.Empty;
 
     /// <summary>
+    /// Perfil de acesso. Todo usuário nasce <see cref="MyCRUD.Login.Papel.Operador"/>; só vira
+    /// <see cref="MyCRUD.Login.Papel.Admin"/> ao entrar com o e-mail configurado em <c>Admin:Email</c>.
+    /// </summary>
+    /// <remarks>
+    /// Salvo como texto (<c>'Admin'</c>/<c>'Operador'</c>) e protegido por um CHECK no banco.
+    /// Nunca é rebaixado automaticamente: rebaixar um Admin é uma decisão manual (SQL).
+    /// </remarks>
+    public Papel Papel { get; set; } = Papel.Operador;
+
+    /// <summary>
     /// Padroniza o e-mail antes de salvar ou comparar, para que
     /// <c>Ana@Email.com</c> e <c>ana@email.com </c> sejam o mesmo usuário.
     /// </summary>
     public static string NormalizarEmail(string email) =>
         email.Trim().ToLowerInvariant();
 
-    public UsuarioRespostaDto ParaResposta() => new(Id, Nome, Email);
+    public UsuarioRespostaDto ParaResposta() => new(Id, Nome, Email, Papel);
 }

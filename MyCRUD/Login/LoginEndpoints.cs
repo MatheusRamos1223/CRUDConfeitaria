@@ -18,17 +18,27 @@ namespace MyCRUD.Login;
 /// <list type="number">
 ///   <item>O cliente envia e-mail e senha.</item>
 ///   <item>A API busca o usuário e compara a senha com o hash salvo.</item>
-///   <item>Se conferir, cria uma <see cref="ClaimsIdentity"/> (ID, nome, e-mail).</item>
+///   <item>Se o e-mail for o de <c>Admin:Email</c>, promove o usuário a <see cref="Papel.Admin"/>.</item>
+///   <item>Cria uma <see cref="ClaimsIdentity"/> (ID, nome, e-mail e papel).</item>
 ///   <item><c>SignInAsync</c> criptografa essas claims dentro do cookie <c>Confeitaria.Auth</c>.</item>
 ///   <item>Nas próximas requisições o navegador reenvia o cookie e o ASP.NET reconstrói o usuário.</item>
 /// </list>
 /// <para>
 /// O cookie é criptografado e assinado pelo Data Protection do ASP.NET:
-/// o cliente não consegue ler nem alterar as claims.
+/// o cliente não consegue ler nem alterar as claims — nem trocar o próprio papel.
+/// </para>
+/// <para><b>Quem é Admin?</b></para>
+/// <para>
+/// Não há tela para promover usuários. O Admin é definido na configuração
+/// (<c>Admin:Email</c>, via User Secrets ou variável de ambiente <c>Admin__Email</c>).
+/// Assim, ninguém vira Admin por uma requisição HTTP, e o e-mail do Admin não fica no repositório.
 /// </para>
 /// </remarks>
 public static class LoginEndpoints
 {
+    /// <summary>Chave de configuração com o e-mail de quem deve ser Admin.</summary>
+    public const string ChaveEmailAdmin = "Admin:Email";
+
     // Hash de uma senha aleatória, calculado uma vez. Usado quando o e-mail não existe,
     // para que o tempo de resposta seja igual ao de um e-mail existente com senha errada.
     // Sem isso, um atacante mediria o tempo e descobriria quais e-mails estão cadastrados.
@@ -37,6 +47,13 @@ public static class LoginEndpoints
 
     public static RouteGroupBuilder MapLoginEndpoints(this WebApplication app)
     {
+        // Sem Admin configurado a aplicação funciona, mas ninguém consegue gerenciar
+        // categorias nem desativar produtos. Avisamos uma vez, na inicialização.
+        if (string.IsNullOrWhiteSpace(app.Configuration[ChaveEmailAdmin]))
+        {
+            app.Logger.LogWarning("Nenhum Admin configurado (Admin:Email).");
+        }
+
         var grupo = app.MapGroup("/login").WithTags("Autenticação");
 
         grupo.MapPost("/", Entrar)
@@ -75,7 +92,11 @@ public static class LoginEndpoints
     }
 
     private static async Task<Results<Ok<UsuarioRespostaDto>, UnauthorizedHttpResult>> Entrar(
-        LoginDto dto, AppDbContext db, HttpContext httpContext)
+        LoginDto dto,
+        AppDbContext db,
+        HttpContext httpContext,
+        IConfiguration configuracao,
+        ILoggerFactory loggerFactory)
     {
         var email = Usuario.NormalizarEmail(dto.Email);
         var usuario = await db.Usuarios.FirstOrDefaultAsync(u => u.Email == email);
@@ -98,15 +119,36 @@ public static class LoginEndpoints
         if (resultado == PasswordVerificationResult.SuccessRehashNeeded)
         {
             usuario.SenhaHash = hasher.HashPassword(usuario, dto.Senha);
-            await db.SaveChangesAsync();
+        }
+
+        // Promoção a Admin: só depois de a senha conferir, e nunca o contrário
+        // (um Admin não é rebaixado se o e-mail configurado mudar).
+        var promovido = DeveSerPromovidoAAdmin(usuario, configuracao);
+
+        if (promovido)
+        {
+            usuario.Papel = Papel.Admin;
+        }
+
+        // Um único UPDATE para o hash novo e/ou o papel novo. Se nada mudou,
+        // o EF não envia comando nenhum ao banco.
+        await db.SaveChangesAsync();
+
+        // Mudança de privilégio fica registrada no log (auditoria), só com o ID — sem e-mail.
+        if (promovido)
+        {
+            loggerFactory.CreateLogger(typeof(LoginEndpoints))
+                .LogInformation("Usuário {UsuarioId} promovido a Admin por Admin:Email.", usuario.Id);
         }
 
         // Claims: afirmações sobre o usuário que viajam dentro do cookie.
+        // ClaimTypes.Role é a claim que RequireRole (política SomenteAdmin) confere.
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
             new Claim(ClaimTypes.Name, usuario.Nome),
-            new Claim(ClaimTypes.Email, usuario.Email)
+            new Claim(ClaimTypes.Email, usuario.Email),
+            new Claim(ClaimTypes.Role, usuario.Papel.ToString())
         };
 
         var identidade = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -130,16 +172,44 @@ public static class LoginEndpoints
     }
 
     /// <summary>
-    /// Lê o usuário direto das claims do cookie, sem consultar o banco.
-    /// Usado pelas páginas HTML para saber se ainda há sessão ativa.
+    /// Compara o e-mail do usuário com o configurado em <c>Admin:Email</c>.
     /// </summary>
+    /// <returns><c>true</c> se o usuário deve virar Admin agora (ainda não é e o e-mail confere).</returns>
+    private static bool DeveSerPromovidoAAdmin(Usuario usuario, IConfiguration configuracao)
+    {
+        var emailAdmin = configuracao[ChaveEmailAdmin];
+
+        // Sem configuração, ninguém é promovido (o aviso sai na inicialização).
+        if (string.IsNullOrWhiteSpace(emailAdmin))
+        {
+            return false;
+        }
+
+        // Mesma normalização do cadastro: " Ana@Email.com" na configuração também vale.
+        return usuario.Papel != Papel.Admin
+            && usuario.Email == Usuario.NormalizarEmail(emailAdmin);
+    }
+
+    /// <summary>
+    /// Lê o usuário direto das claims do cookie, sem consultar o banco.
+    /// Usado pelas páginas HTML para saber se ainda há sessão ativa e qual o papel.
+    /// </summary>
+    /// <remarks>
+    /// Como vem do cookie, o papel é o do momento do login: uma promoção feita
+    /// depois só aparece quando o usuário sair e entrar de novo.
+    /// </remarks>
     private static Ok<UsuarioRespostaDto> UsuarioAtual(ClaimsPrincipal user)
     {
         var id = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var nome = user.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
         var email = user.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
 
-        return TypedResults.Ok(new UsuarioRespostaDto(id, nome, email));
+        // Cookie emitido antes da existência de papéis não tem a claim: vale o padrão (Operador).
+        var papel = Enum.TryParse<Papel>(user.FindFirstValue(ClaimTypes.Role), out var lido)
+            ? lido
+            : Papel.Operador;
+
+        return TypedResults.Ok(new UsuarioRespostaDto(id, nome, email, papel));
     }
 
     private static async Task<Results<Created<UsuarioRespostaDto>, ProblemHttpResult>> Cadastrar(
@@ -156,10 +226,13 @@ public static class LoginEndpoints
                 statusCode: StatusCodes.Status409Conflict);
         }
 
+        // Cadastro SEMPRE cria Operador. Quem usar o e-mail de Admin:Email
+        // só vira Admin no login, depois de provar a senha.
         var usuario = new Usuario
         {
             Nome = dto.Nome.Trim(),
-            Email = email
+            Email = email,
+            Papel = Papel.Operador
         };
 
         usuario.SenhaHash = new PasswordHasher<Usuario>().HashPassword(usuario, dto.Senha);

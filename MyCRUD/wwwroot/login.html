@@ -92,7 +92,10 @@
                 });
 
                 if (resposta.ok) {
-                    window.location.href = "/produtos.html";
+                    // Pedidos é a tela de uso diário (Admin e Operador começam por ela).
+                    // O papel vem na resposta ({ ..., papel: "Admin" }), mas cada tela
+                    // o relê de /login/eu, então não é preciso guardá-lo aqui.
+                    window.location.href = "/pedidos.html";
                     mensagem.textContent = "Login realizado!";
                     formulario.elements.senha.value = "";
                 } else if (resposta.status === 401) {
