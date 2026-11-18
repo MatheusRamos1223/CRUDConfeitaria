@@ -4,51 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Cadastrar usuário — Confeitaria</title>
-    <!-- Mesmo visual da tela de login. -->
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #fff5ef;
-            display: grid;
-            place-items: center;
-            min-height: 100vh;
-            margin: 0;
-        }
-
-        main {
-            background: white;
-            padding: 32px;
-            border-radius: 12px;
-            width: min(320px, 80vw);
-        }
-
-        label {
-            display: block;
-            margin-top: 16px;
-        }
-
-        input, button {
-            box-sizing: border-box;
-            width: 100%;
-            padding: 12px;
-            margin-top: 8px;
-        }
-
-        button {
-            background: #793e29;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        .ajuda {
-            font-size: .85rem;
-            color: #6b5a52;
-        }
-    </style>
+    <link rel="stylesheet" href="/css/app.css">
 </head>
-<body>
+<body class="pagina-acesso">
     <main>
         <h1>Cadastrar usuário</h1>
 
@@ -76,43 +34,6 @@
     </main>
 
     <script src="/js/api.js"></script>
-    <script>const formulario = document.querySelector("#form-cadastro");
-        const mensagem = document.querySelector("#mensagem");
-
-        formulario.addEventListener("submit", async (evento) => {
-            evento.preventDefault();
-
-            const botao = formulario.querySelector("button");
-            botao.disabled = true;
-            mensagem.textContent = "Cadastrando...";
-
-            try {
-                const resposta = await fetch("/login/cadastro", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        nome: formulario.elements.nome.value,
-                        email: formulario.elements.email.value,
-                        senha: formulario.elements.senha.value
-                    })
-                });
-
-                if (resposta.ok) {
-                    formulario.reset();
-                    mensagem.textContent =
-                        "Usuário criado como Operador! Agora você pode fazer login.";
-                } else {
-                    // 400 (validação), 409 (e-mail repetido) e 429 (limite) vêm com a mensagem da API.
-                    mensagem.textContent = await mensagemDeErro(
-                        resposta, "Não foi possível cadastrar.");
-                }
-            } catch {
-                mensagem.textContent = "Não foi possível conectar ao servidor.";
-            } finally {
-                botao.disabled = false;
-            }
-        });</script>
+    <script src="/js/paginas/cadastro.js"></script>
 </body>
 </html>

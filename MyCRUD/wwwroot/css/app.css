@@ -10,6 +10,9 @@
  * Abaixo de 960px tudo empilha na ordem do HTML.
  *
  * Paleta derivada do login.html (#793e29 marrom, #fff5ef creme).
+ *
+ * Content-Security-Policy (style-src 'self'): este arquivo é o ÚNICO lugar de estilo.
+ * Nada de <style> nem atributo style= no HTML, nem element.style no JS — use classes.
  * Elementos com a classe .so-admin somem para quem não é Admin — isso é só
  * conforto visual; quem barra de verdade é a API (403).
  */
@@ -373,6 +376,9 @@ input[readonly] { background: var(--creme); }
 .alerta-info { background: var(--info-fundo); color: var(--info); border-color: #c7dbea; }
 
 /* ------------------------------------------------------------------ detalhe do pedido */
+/* Resumo do pedido ocupa a posição da barra de filtro no esqueleto da página. */
+.area-filtro { grid-area: filtro; }
+
 .resumo {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -396,6 +402,47 @@ input[readonly] { background: var(--creme); }
 
 .etapa.feita { border-color: var(--marrom); color: var(--marrom-escuro); font-weight: 600; }
 .etapa.atual { border-color: var(--marrom-claro); color: var(--marrom-escuro); font-weight: 600; }
+
+/* ------------------------------------------------------------------ login e cadastro (body.pagina-acesso) */
+/* Telas fora do layout interno: cartão centralizado, campos largos. */
+body.pagina-acesso {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+}
+
+.pagina-acesso main {
+    background: var(--superficie);
+    padding: 32px;
+    border-radius: 12px;
+    width: min(320px, 80vw);
+}
+
+.pagina-acesso h1 { margin-bottom: 8px; }
+
+.pagina-acesso label {
+    display: block;
+    margin-top: 16px;
+}
+
+.pagina-acesso input,
+.pagina-acesso button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 8px;
+}
+
+.pagina-acesso button {
+    font: inherit;
+    background: var(--marrom);
+    color: #fff;
+    border: none;
+    border-radius: var(--raio-pequeno);
+    cursor: pointer;
+}
+
+.pagina-acesso button:hover { background: #64321f; }
+.pagina-acesso button:disabled { opacity: .55; cursor: not-allowed; }
 
 /* ------------------------------------------------------------------ permissões (só visual) */
 body:not([data-papel="Admin"]) .so-admin { display: none !important; }
