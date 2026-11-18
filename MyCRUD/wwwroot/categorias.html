@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Categorias — Confeitaria</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <!-- Tela T2 (docs/fases-2-4.md). Listar: qualquer logado. Cadastrar/editar/excluir: Admin (R10). -->
+    <main class="pagina">
+        <div class="titulo-pagina">
+            <h1>Categorias</h1>
+            <span class="subtitulo">Agrupam os produtos do cardápio</span>
+        </div>
+
+        <p id="mensagem" class="mensagem" role="status"></p>
+
+        <!-- 1. Barra de filtro → GET /categorias?nome=&pagina= -->
+        <form id="form-filtro" class="barra-filtro cartao" role="search">
+            <div class="campo campo-busca">
+                <label for="filtro-nome">Nome</label>
+                <input id="filtro-nome" name="nome" maxlength="60" placeholder="Buscar por nome">
+            </div>
+            <div class="botoes">
+                <button class="botao botao-primario" type="submit">Filtrar</button>
+                <button class="botao" type="reset">Limpar</button>
+            </div>
+        </form>
+
+        <!-- 2. Lista + paginador -->
+        <section class="lista cartao" aria-labelledby="titulo-lista">
+            <div class="lista-cabecalho">
+                <h2 id="titulo-lista">Categorias cadastradas</h2>
+                <span class="contagem" id="contagem"></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Nome</th>
+                        <th scope="col" class="num">Produtos</th>
+                        <th scope="col"><span class="sr-only">Ações</span></th>
+                    </tr>
+                </thead>
+                <tbody id="linhas"></tbody>
+            </table>
+            <div class="paginador" id="paginador"></div>
+        </section>
+
+        <!-- 3. Formulário + 4. ações → POST /categorias | PUT /categorias/{id} (somente Admin) -->
+        <form id="form-categoria" class="formulario cartao" novalidate>
+            <h2 id="titulo-formulario">Nova categoria</h2>
+            <div class="so-admin">
+                <div class="campo">
+                    <label for="nome">Nome</label>
+                    <input id="nome" name="nome" maxlength="60" required placeholder="Ex.: Bolos de pote">
+                    <span class="ajuda">Único, sem diferenciar maiúsculas (Bolos = bolos).</span>
+                </div>
+                <div class="acoes-formulario">
+                    <button id="salvar" class="botao botao-primario" type="submit">Cadastrar</button>
+                    <button id="cancelar" class="botao" type="button" hidden>Cancelar</button>
+                </div>
+            </div>
+            <p id="aviso-permissao" class="aviso-permissao" hidden>Apenas Admin cadastra, edita ou exclui categorias.</p>
+        </form>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script>
+        // Regra de segurança da página: todo texto vindo da API entra por textContent
+        // (criarCelula, criarBotao, mostrarMensagem), nunca por innerHTML.
+
+        const mensagem = document.querySelector("#mensagem");
+        const formFiltro = document.querySelector("#form-filtro");
+        const filtroNome = document.querySelector("#filtro-nome");
+        const linhas = document.querySelector("#linhas");
+        const contagem = document.querySelector("#contagem");
+        const paginador = document.querySelector("#paginador");
+        const formulario = document.querySelector("#form-categoria");
+        const tituloFormulario = document.querySelector("#titulo-formulario");
+        const campoNome = document.querySelector("#nome");
+        const salvar = document.querySelector("#salvar");
+        const cancelar = document.querySelector("#cancelar");
+
+        /** Estado da tela: filtro aplicado, página atual e categoria em edição. */
+        const estado = { nome: "", pagina: 1, idEmEdicao: null, ehAdmin: false };
+
+        // Nome que a migração dá às categorias criadas para produtos antigos (R11).
+        const NOME_AUTOMATICO = /^Categoria -?\d+$/;
+
+        // -------------------------------------------------------------------
+        // Listagem
+        // -------------------------------------------------------------------
+
+        async function carregarLista(pagina = estado.pagina) {
+            estado.pagina = pagina;
+
+            let resposta;
+            try {
+                resposta = await fetch("/categorias" + montarQuery({ nome: estado.nome, pagina }));
+            } catch {
+                mostrarMensagem(mensagem, "Não foi possível conectar ao servidor.", "erro");
+                return;
+            }
+
+            if (!resposta.ok) {
+                mostrarMensagem(mensagem,
+                    await mensagemDeErro(resposta, "Não foi possível carregar as categorias."), "erro");
+                return;
+            }
+
+            const resultado = await resposta.json();
+
+            // Página além do fim (ex.: excluiu o último item da última página): volta uma.
+            if (resultado.itens.length === 0 && resultado.totalPaginas > 0 && pagina > resultado.totalPaginas) {
+                return carregarLista(resultado.totalPaginas);
+            }
+
+            desenharLinhas(resultado.itens);
+            contagem.textContent = resultado.total === 1 ? "1 encontrada" : `${resultado.total} encontradas`;
+            montarPaginador(paginador, resultado, (novaPagina) => carregarLista(novaPagina));
+            avisarNomesAutomaticos(resultado.itens);
+        }
+
+        function desenharLinhas(categorias) {
+            linhas.replaceChildren();
+
+            if (categorias.length === 0) {
+                const tr = document.createElement("tr");
+                const celula = criarCelula("Nenhuma categoria encontrada.", "lista-vazia");
+                celula.colSpan = 4;
+                tr.appendChild(celula);
+                linhas.appendChild(tr);
+                return;
+            }
+
+            for (const categoria of categorias) {
+                const tr = document.createElement("tr");
+                if (categoria.id === estado.idEmEdicao) tr.classList.add("em-edicao");
+
+                const acoes = document.createElement("td");
+                acoes.className = "acoes";
+                acoes.appendChild(criarBotao("Editar", "so-admin", () => iniciarEdicao(categoria)));
+
+                // Excluir só faz sentido sem produtos; mesmo assim a API confere e devolve 409 (R9).
+                const excluir = criarBotao("Excluir", "botao-perigo so-admin", () => excluirCategoria(categoria, excluir));
+                if (categoria.quantidadeProdutos > 0) {
+                    excluir.disabled = true;
+                    excluir.title = "Possui produtos — mova-os para outra categoria antes de excluir";
+                }
+                acoes.appendChild(excluir);
+
+                tr.append(
+                    criarCelula(categoria.id, "id"),
+                    criarCelula(categoria.nome),
+                    criarCelula(categoria.quantidadeProdutos, "num"),
+                    acoes);
+                linhas.appendChild(tr);
+            }
+        }
+
+        /** Lembra o Admin de renomear as categorias "Categoria N" criadas pela migração. */
+        function avisarNomesAutomaticos(categorias) {
+            if (!estado.ehAdmin || mensagem.textContent) return;
+
+            if (categorias.some((c) => NOME_AUTOMATICO.test(c.nome))) {
+                mostrarMensagem(mensagem,
+                    "Há categorias criadas automaticamente pela migração (\"Categoria N\") — renomeie-as.", "info");
+            }
+        }
+
+        formFiltro.addEventListener("submit", (evento) => {
+            evento.preventDefault();
+            estado.nome = filtroNome.value.trim();
+            carregarLista(1);
+        });
+
+        // "reset" dispara ANTES de o navegador limpar os campos; por isso usamos o estado,
+        // e não o valor do input.
+        formFiltro.addEventListener("reset", () => {
+            estado.nome = "";
+            carregarLista(1);
+        });
+
+        // -------------------------------------------------------------------
+        // Formulário (cadastrar / editar) — somente Admin
+        // -------------------------------------------------------------------
+
+        function iniciarEdicao(categoria) {
+            estado.idEmEdicao = categoria.id;
+            campoNome.value = categoria.nome;
+            tituloFormulario.textContent = `Editar categoria ${categoria.id}`;
+            salvar.textContent = "Salvar alterações";
+            cancelar.hidden = false;
+            formulario.classList.add("editando");
+            marcarLinhaEmEdicao();
+            mostrarMensagem(mensagem, "");
+            campoNome.focus();
+        }
+
+        function encerrarEdicao() {
+            estado.idEmEdicao = null;
+            formulario.reset();
+            tituloFormulario.textContent = "Nova categoria";
+            salvar.textContent = "Cadastrar";
+            cancelar.hidden = true;
+            formulario.classList.remove("editando");
+            marcarLinhaEmEdicao();
+        }
+
+        /** Destaca a linha em edição sem recarregar a lista. */
+        function marcarLinhaEmEdicao() {
+            for (const tr of linhas.rows) {
+                const id = Number(tr.cells[0]?.textContent);
+                tr.classList.toggle("em-edicao", estado.idEmEdicao !== null && id === estado.idEmEdicao);
+            }
+        }
+
+        cancelar.addEventListener("click", () => {
+            encerrarEdicao();
+            mostrarMensagem(mensagem, "");
+        });
+
+        formulario.addEventListener("submit", async (evento) => {
+            evento.preventDefault();
+
+            const nome = campoNome.value.trim();
+            if (!nome) {
+                mostrarMensagem(mensagem, "Informe o nome.", "erro");
+                campoNome.focus();
+                return;
+            }
+
+            const editando = estado.idEmEdicao !== null;
+            const url = editando ? `/categorias/${estado.idEmEdicao}` : "/categorias";
+
+            salvar.disabled = true;
+            try {
+                const resposta = await fetch(url, {
+                    method: editando ? "PUT" : "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ nome })
+                });
+
+                if (!resposta.ok) {
+                    // 404 na edição: outra pessoa excluiu a categoria enquanto o formulário estava aberto.
+                    if (resposta.status === 404) encerrarEdicao();
+                    mostrarMensagem(mensagem,
+                        await mensagemDeErro(resposta, "Não foi possível salvar a categoria."), "erro");
+                    if (resposta.status === 404) await carregarLista();
+                    return;
+                }
+
+                const categoria = await resposta.json();
+                encerrarEdicao();
+                mostrarMensagem(mensagem,
+                    editando ? `Categoria "${categoria.nome}" atualizada.` : `Categoria "${categoria.nome}" cadastrada.`,
+                    "sucesso");
+                await carregarLista();
+            } catch {
+                mostrarMensagem(mensagem, "Não foi possível conectar ao servidor.", "erro");
+            } finally {
+                salvar.disabled = false;
+            }
+        });
+
+        // -------------------------------------------------------------------
+        // Exclusão — somente Admin
+        // -------------------------------------------------------------------
+
+        async function excluirCategoria(categoria, botao) {
+            if (!confirm(`Excluir a categoria "${categoria.nome}"?`)) return;
+
+            botao.disabled = true;
+            try {
+                const resposta = await fetch(`/categorias/${categoria.id}`, { method: "DELETE" });
+
+                if (!resposta.ok) {
+                    // 409: ganhou produtos desde a última listagem (R9). 404: já foi excluída.
+                    mostrarMensagem(mensagem,
+                        await mensagemDeErro(resposta, "Não foi possível excluir a categoria."), "erro");
+                    await carregarLista();
+                    return;
+                }
+
+                if (estado.idEmEdicao === categoria.id) encerrarEdicao();
+                mostrarMensagem(mensagem, `Categoria "${categoria.nome}" excluída.`, "sucesso");
+                await carregarLista();
+            } catch {
+                mostrarMensagem(mensagem, "Não foi possível conectar ao servidor.", "erro");
+                botao.disabled = false;
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // Início
+        // -------------------------------------------------------------------
+
+        iniciarLayout({ ativo: "categorias" }).then((usuario) => {
+            if (!usuario) return; // sem sessão: já foi redirecionado ao login
+
+            // Esconder o formulário é só conforto visual (CSS .so-admin);
+            // quem garante a regra é a API, que devolve 403 ao Operador (R2).
+            estado.ehAdmin = usuario.papel === "Admin";
+            document.querySelector("#aviso-permissao").hidden = estado.ehAdmin;
+
+            carregarLista(1);
+        });
+    </script>
+</body>
+</html>
