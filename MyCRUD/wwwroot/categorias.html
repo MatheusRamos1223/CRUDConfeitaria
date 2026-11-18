@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Categorias — Confeitaria</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <!-- Tela T2 (docs/fases-2-4.md). Listar: qualquer logado. Cadastrar/editar/excluir: Admin (R10). -->
+    <main class="pagina">
+        <div class="titulo-pagina">
+            <h1>Categorias</h1>
+            <span class="subtitulo">Agrupam os produtos do cardápio</span>
+        </div>
+
+        <p id="mensagem" class="mensagem" role="status"></p>
+
+        <!-- 1. Barra de filtro → GET /categorias?nome=&pagina= -->
+        <form id="form-filtro" class="barra-filtro cartao" role="search">
+            <div class="campo campo-busca">
+                <label for="filtro-nome">Nome</label>
+                <input id="filtro-nome" name="nome" maxlength="60" placeholder="Buscar por nome">
+            </div>
+            <div class="botoes">
+                <button class="botao botao-primario" type="submit">Filtrar</button>
+                <button class="botao" type="reset">Limpar</button>
+            </div>
+        </form>
+
+        <!-- 2. Lista + paginador -->
+        <section class="lista cartao" aria-labelledby="titulo-lista">
+            <div class="lista-cabecalho">
+                <h2 id="titulo-lista">Categorias cadastradas</h2>
+                <span class="contagem" id="contagem"></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Nome</th>
+                        <th scope="col" class="num">Produtos</th>
+                        <th scope="col"><span class="sr-only">Ações</span></th>
+                    </tr>
+                </thead>
+                <tbody id="linhas"></tbody>
+            </table>
+            <div class="paginador" id="paginador"></div>
+        </section>
+
+        <!-- 3. Formulário + 4. ações → POST /categorias | PUT /categorias/{id} (somente Admin) -->
+        <form id="form-categoria" class="formulario cartao" novalidate>
+            <h2 id="titulo-formulario">Nova categoria</h2>
+            <div class="so-admin">
+                <div class="campo">
+                    <label for="nome">Nome</label>
+                    <input id="nome" name="nome" maxlength="60" required placeholder="Ex.: Bolos de pote">
+                    <span class="ajuda">Único, sem diferenciar maiúsculas (Bolos = bolos).</span>
+                </div>
+                <div class="acoes-formulario">
+                    <button id="salvar" class="botao botao-primario" type="submit">Cadastrar</button>
+                    <button id="cancelar" class="botao" type="button" hidden>Cancelar</button>
+                </div>
+            </div>
+            <p id="aviso-permissao" class="aviso-permissao" hidden>Apenas Admin cadastra, edita ou exclui categorias.</p>
+        </form>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/paginas/categorias.js"></script>
+</body>
+</html>

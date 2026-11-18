@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Clientes — Confeitaria</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <!-- Tela T3 (docs/fases-2-4.md). Rotas: GET/POST /clientes, PUT/DELETE /clientes/{id}. -->
+    <main class="pagina">
+        <div class="titulo-pagina">
+            <h1>Clientes</h1>
+            <span class="subtitulo">Quem encomenda com a confeitaria</span>
+        </div>
+
+        <p id="mensagem" class="mensagem" role="status"></p>
+
+        <!-- 1. Barra de filtro → GET /clientes?busca=&pagina= -->
+        <form id="filtro" class="barra-filtro cartao" role="search">
+            <div class="campo campo-busca">
+                <label for="filtro-busca">Nome ou telefone</label>
+                <input id="filtro-busca" name="busca" maxlength="120" placeholder="Ex.: Maria ou 19 9">
+            </div>
+            <div class="botoes">
+                <button class="botao botao-primario" type="submit">Filtrar</button>
+                <button class="botao" type="reset">Limpar</button>
+            </div>
+        </form>
+
+        <!-- 2. Lista + paginador -->
+        <section class="lista cartao" aria-labelledby="titulo-lista">
+            <div class="lista-cabecalho">
+                <h2 id="titulo-lista">Clientes cadastrados</h2>
+                <span class="contagem" id="contagem"></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Nome</th>
+                        <th scope="col">Telefone</th>
+                        <th scope="col">E-mail</th>
+                        <th scope="col"><span class="sr-only">Ações</span></th>
+                    </tr>
+                </thead>
+                <tbody id="linhas"></tbody>
+            </table>
+            <p id="lista-vazia" class="lista-vazia" hidden>Nenhum cliente encontrado.</p>
+            <div class="paginador" id="paginador"></div>
+        </section>
+
+        <!-- 3. Formulário + 4. ações → POST /clientes | PUT /clientes/{id} -->
+        <form id="formulario" class="formulario cartao">
+            <h2 id="titulo-formulario">Novo cliente</h2>
+            <div class="campo">
+                <label for="nome">Nome</label>
+                <input id="nome" name="nome" maxlength="120" required autocomplete="off">
+            </div>
+            <div class="campo">
+                <label for="telefone">Telefone</label>
+                <input id="telefone" name="telefone" type="tel" maxlength="20" required
+                       placeholder="(19) 99999-0000" autocomplete="off">
+                <span class="ajuda">Com DDD. Salvo só com números (10 ou 11 dígitos).</span>
+            </div>
+            <div class="campo">
+                <label for="email">E-mail <span class="opcional">(opcional)</span></label>
+                <input id="email" name="email" type="email" maxlength="254" autocomplete="off">
+            </div>
+            <div class="acoes-formulario">
+                <button id="salvar" class="botao botao-primario" type="submit">Cadastrar</button>
+                <button id="cancelar" class="botao" type="button" hidden>Cancelar</button>
+            </div>
+        </form>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/paginas/clientes.js"></script>
+</body>
+</html>

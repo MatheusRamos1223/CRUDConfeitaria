@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pedidos — Confeitaria</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <!-- Tela T4 (docs/fases-2-4.md). Filtro + lista paginada à esquerda, "Novo pedido" à direita. -->
+    <main class="pagina">
+        <div class="titulo-pagina">
+            <h1>Pedidos</h1>
+            <span class="subtitulo">Encomendas por data de entrega</span>
+        </div>
+
+        <p id="mensagem" class="mensagem" role="status"></p>
+
+        <!-- 1. Barra de filtro → GET /pedidos?busca=&status=&de=&ate=&pagina=&tamanho= -->
+        <form id="form-filtro" class="barra-filtro cartao" role="search">
+            <div class="campo campo-busca">
+                <label for="filtro-busca">Cliente</label>
+                <input id="filtro-busca" name="busca" placeholder="Nome do cliente" maxlength="120">
+            </div>
+            <div class="campo">
+                <label for="filtro-status">Status</label>
+                <select id="filtro-status" name="status">
+                    <option value="">Todos</option>
+                    <option>Aberto</option>
+                    <option>Confirmado</option>
+                    <option>Entregue</option>
+                    <option>Cancelado</option>
+                </select>
+            </div>
+            <div class="campo">
+                <label for="filtro-de">Entrega de</label>
+                <input id="filtro-de" name="de" type="date">
+            </div>
+            <div class="campo">
+                <label for="filtro-ate">até</label>
+                <input id="filtro-ate" name="ate" type="date">
+            </div>
+            <div class="botoes">
+                <button class="botao botao-primario" type="submit">Filtrar</button>
+                <button class="botao" type="reset">Limpar</button>
+            </div>
+        </form>
+
+        <!-- 2. Lista + paginador -->
+        <section class="lista cartao" aria-labelledby="titulo-lista">
+            <div class="lista-cabecalho">
+                <h2 id="titulo-lista">Pedidos</h2>
+                <span class="contagem" id="contagem"></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Nº</th>
+                        <th scope="col">Cliente</th>
+                        <th scope="col">Entrega</th>
+                        <th scope="col" class="num">Itens</th>
+                        <th scope="col" class="num">Total</th>
+                        <th scope="col">Status</th>
+                        <th scope="col"><span class="sr-only">Ações</span></th>
+                    </tr>
+                </thead>
+                <tbody id="linhas"></tbody>
+            </table>
+            <div class="paginador" id="paginador"></div>
+        </section>
+
+        <!-- 3. Formulário + 4. ações → POST /pedidos (preços lidos e congelados pela API) -->
+        <form id="form-pedido" class="formulario cartao">
+            <h2>Novo pedido</h2>
+            <div class="campo">
+                <label for="clienteId">Cliente</label>
+                <select id="clienteId" name="clienteId" required></select>
+            </div>
+            <div class="campo">
+                <label for="dataEntrega">Data de entrega</label>
+                <input id="dataEntrega" name="dataEntrega" type="date" required>
+            </div>
+
+            <span class="rotulo">Itens</span>
+            <div class="itens-formulario" id="itens"></div>
+            <button class="botao botao-pequeno" type="button" id="adicionar-item">+ Adicionar item</button>
+
+            <div class="total-previsto">
+                <span>Total estimado</span>
+                <span id="total-previsto"></span>
+            </div>
+            <p class="ajuda">Preços atuais do cardápio. O valor fica congelado ao criar o pedido.</p>
+
+            <div class="acoes-formulario">
+                <button class="botao botao-primario" type="submit" id="botao-criar">Criar pedido</button>
+                <button class="botao" type="reset">Limpar</button>
+            </div>
+        </form>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/paginas/pedidos.js"></script>
+</body>
+</html>

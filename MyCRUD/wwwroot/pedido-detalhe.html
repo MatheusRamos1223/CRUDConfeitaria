@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pedido — Confeitaria</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <!-- Tela T5 (docs/fases-2-4.md). Mesmo esqueleto das outras telas, em largura total:
+         o lugar da barra de filtro mostra o resumo, a lista mostra os itens,
+         e as ações são as transições de status permitidas. Sem formulário (pedido imutável, D5). -->
+    <main class="pagina pagina-larga">
+        <div class="titulo-pagina">
+            <h1 id="titulo">Pedido</h1>
+            <span id="selo-status"></span>
+            <a class="botao botao-pequeno" href="/pedidos.html">← Voltar aos pedidos</a>
+        </div>
+
+        <p id="mensagem" class="mensagem" role="status"></p>
+
+        <!-- 1. Resumo (posição da barra de filtro) → GET /pedidos/{id} -->
+        <section class="cartao area-filtro" aria-label="Resumo do pedido">
+            <dl class="resumo" id="resumo"></dl>
+            <div class="linha-do-tempo" id="linha-do-tempo"></div>
+            <!-- Quem criou e quem mudou o status por último (CriadoPor / StatusAlteradoPor). -->
+            <p class="auditoria">
+                <span id="auditoria-criacao"></span>
+                <span id="auditoria-status" hidden></span>
+            </p>
+        </section>
+
+        <!-- 2. Lista de itens (somente leitura: preço congelado na criação) -->
+        <section class="lista cartao" aria-labelledby="titulo-itens">
+            <div class="lista-cabecalho">
+                <h2 id="titulo-itens">Itens</h2>
+                <span class="contagem">Preços fixados em <span id="criado-em"></span></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Produto</th>
+                        <th scope="col" class="num">Qtd.</th>
+                        <th scope="col" class="num">Preço unit.</th>
+                        <th scope="col" class="num">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody id="linhas"></tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3" class="num">Total</td>
+                        <td class="num" id="total"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </section>
+
+        <!-- 4. Ações → POST /pedidos/{id}/confirmar | /entregar | /cancelar -->
+        <div class="acoes-pagina cartao" id="acoes"></div>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/paginas/pedido-detalhe.js"></script>
+</body>
+</html>

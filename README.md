@@ -1,6 +1,6 @@
 # CRUD Confeitaria
 
-Projeto acadêmico em C# com ASP.NET Core (.NET 10), Minimal APIs e PostgreSQL hospedado no Supabase. Inclui CRUD de produtos, cadastro de usuários, login por cookie e páginas HTML com JavaScript.
+Projeto acadêmico em C# com ASP.NET Core (.NET 10), Minimal APIs e PostgreSQL hospedado no Supabase. Inclui pedidos com itens e preço congelado, clientes, produtos, categorias, papéis Admin/Operador, login por cookie e páginas HTML com JavaScript.
 
 ## Sumário
 
@@ -19,30 +19,39 @@ Projeto acadêmico em C# com ASP.NET Core (.NET 10), Minimal APIs e PostgreSQL h
 
 Implementado:
 
-- Listar, buscar, cadastrar, atualizar e excluir produtos no banco.
-- Validar entrada com DataAnnotations nos DTOs, devolvendo erros por campo (`400 ValidationProblem`).
-- Padronizar todos os erros em Problem Details (RFC 9457), sem stack trace fora de Development.
-- Cadastrar usuários com nome, e-mail válido e senha entre 8 e 128 caracteres.
+- **Pedidos**: criar pedido com 1–50 itens para hoje até 365 dias à frente (fuso `America/Sao_Paulo`), preço de cada item copiado do produto na criação (congelado), total calculado; status Aberto → Confirmado → Entregue, ou Cancelado, por rotas de ação; pedido nunca é editado nem excluído; registra quem criou e quem fez a última mudança de status (com data/hora).
+- **Clientes**: cadastrar, editar, buscar por nome ou telefone; telefone salvo só com dígitos (10 ou 11); e-mail opcional; cliente com pedidos não pode ser excluído.
+- **Produtos**: cadastrar e editar em uma categoria existente; `DELETE` **desativa** (soft delete) e `POST /produtos/{id}/reativar` reativa; listagem com filtro por nome, categoria e situação.
+- **Categorias**: nome único sem diferenciar maiúsculas; categoria com produtos (ativos ou inativos) não pode ser excluída.
+- **Papéis**: `Operador` (padrão) e `Admin`, definido pela configuração `Admin:Email`; rotas de Admin devolvem `403` para Operador.
+- Listagens paginadas com o mesmo envelope `{ itens, pagina, tamanhoPagina, total, totalPaginas }` (até 100 por página) e filtro "contém" sem diferenciar maiúsculas.
+- Validar entrada com DataAnnotations nos DTOs e filtros, devolvendo erros por campo (`400 ValidationProblem`).
+- Padronizar todos os erros em Problem Details (RFC 9457), sem stack trace fora de Development; conflitos de estado em `409`.
+- Garantir integridade também no banco: chaves estrangeiras, `CHECK` (inclusive nome não vazio, preço > 0, e-mail normalizado), `DEFAULT`, índices únicos e tamanhos de coluna.
+- Fechar a Data API do Supabase com RLS ligado (sem policies) em todas as tabelas.
+- Cabeçalhos de segurança (CSP, `nosniff`, `X-Frame-Options`, `Referrer-Policy`; HSTS fora de Development) e anti-CSRF: toda escrita exige `X-Requested-With: fetch`.
+- Revalidar a sessão no banco a cada 5 min: usuário apagado ou com papel alterado tem a sessão encerrada.
+- Cadastrar usuários com nome, e-mail válido e senha entre 8 e 128 caracteres (sempre como Operador).
 - Normalizar e-mail (sem espaços, minúsculas) no cadastro e no login.
-- Limitar login e cadastro a 5 tentativas por minuto por IP (`429`).
+- Limitar login e cadastro a 5 tentativas por minuto por IP (`429`; configurável em `LimiteDeRequisicoes:TentativasPorMinuto`).
 - Documentar a API em OpenAPI com interface Scalar em `/scalar` (Development).
 - Compilar e conferir migrations a cada push pelo GitHub Actions.
 - Armazenar hash de senha com `PasswordHasher<Usuario>`.
-- Impedir e-mails idênticos duplicados por índice único.
-- Autenticar por cookie e exigir autenticação nas rotas de produtos.
+- Autenticar por cookie e exigir autenticação em todas as rotas de dados.
 - Encerrar a sessão por `POST /login/sair`.
-- Cadastrar usuários, fazer login, listar/cadastrar/editar/excluir produtos pelo navegador.
-- Manter produtos e usuários após reiniciar a aplicação.
+- Telas com o mesmo cabeçalho, menu e CSS: Pedidos, Detalhe do pedido, Clientes, Produtos e Categorias.
 
 Limites atuais:
 
-- Categorias, clientes e pedidos ainda não possuem entidades, tabelas ou CRUD.
-- `CategoriaId` é um número no produto, sem relação com uma tabela de categorias.
-- As páginas HTML são públicas; mas os dados e operações de produtos exigem login. `produtos.html` redireciona ao login quando não há sessão.
-- Não há papéis de usuário: qualquer usuário logado pode excluir produtos.
-- A listagem não tem paginação nem filtros.
+- O papel fica no cookie e é conferido no banco a cada 5 min: uma mudança de papel por SQL encerra a sessão em até 5 min (o usuário entra de novo).
+- O cadastro recusa o e-mail de `Admin:Email`: cadastre o Admin antes de configurar esse e-mail (ver [primeiro acesso](#7-primeiro-acesso-e-confirmação)).
+- Sem `UseForwardedHeaders`: atrás de proxy reverso, o rate limit é dividido por todos (IP do proxy).
+- Admin nunca é rebaixado automaticamente; rebaixar é SQL manual. Não há tela de gestão de usuários.
+- Os selects das telas (clientes, produtos, categorias) carregam no máximo 100 registros.
+- Pedido não pode ser editado: para corrigir, cancele e crie outro.
+- Não há testes automatizados ainda (Fase 3).
+- As páginas HTML são públicas; os dados e operações exigem login. As telas redirecionam ao login quando não há sessão.
 - O cadastro de usuários só é registrado em `Development`.
-
 
 ## Tecnologias e estrutura
 
@@ -82,38 +91,44 @@ CRUDConfeitaria/
     ├── Compartilhado/
     │   ├── ValidacaoFiltro.cs
     │   ├── TratadorGlobalDeExcecoes.cs
-    │   └── LimiteDeRequisicoes.cs
+    │   ├── LimiteDeRequisicoes.cs
+    │   ├── Paginacao.cs          # ResultadoPaginado<T> + PaginarAsync
+    │   ├── ConsultaTexto.cs      # filtro "contém" (ILIKE com curingas escapados)
+    │   ├── Politicas.cs          # política SomenteAdmin
+    │   ├── UsuarioLogado.cs      # Id do usuário a partir do cookie
+    │   ├── CabecalhosDeSeguranca.cs  # CSP, nosniff, X-Frame-Options, Referrer-Policy
+    │   └── ProtecaoCsrf.cs       # exige X-Requested-With: fetch nas escritas
     ├── Dados/
     │   └── AppDbContext.cs
-    ├── Produtos/
-    │   ├── Produto.cs
-    │   ├── ProdutoDtos.cs
-    │   └── ProdutoEndpoints.cs
-    ├── Login/
-    │   ├── Usuario.cs
-    │   ├── LoginDtos.cs
-    │   └── LoginEndpoints.cs
-    ├── Migrations/
-    │   ├── ...CriarProdutos.cs e .Designer.cs
-    │   ├── ...AdicionarTabelaUsuarios.cs e .Designer.cs
-    │   ├── ...PadronizarTamanhosEEmail.cs e .Designer.cs
-    │   └── AppDbContextModelSnapshot.cs
+    ├── Login/                    # Usuario, Papel, LoginDtos, LoginEndpoints, ValidacaoDeSessao
+    ├── Produtos/                 # Produto, ProdutoDtos, ProdutoEndpoints
+    ├── Categorias/               # Categoria, CategoriaDtos, CategoriaEndpoints
+    ├── Clientes/                 # Cliente, ClienteDtos, ClienteEndpoints
+    ├── Pedidos/                  # Pedido, ItemPedido, StatusPedido, PedidoDtos, PedidoEndpoints
+    ├── Migrations/               # 8 migrations + AppDbContextModelSnapshot.cs
     └── wwwroot/
-        ├── js/api.js
+        ├── css/app.css
+        ├── js/api.js             # exigirLogin, mensagemDeErro
+        ├── js/layout.js          # cabeçalho, menu, paginador, helpers
         ├── login.html
         ├── cadastro.html
-        └── produtos.html
+        ├── pedidos.html
+        ├── pedido-detalhe.html
+        ├── clientes.html
+        ├── produtos.html
+        ├── categorias.html
 ```
 
-`Program.cs` registra banco, autenticação, autorização, Problem Details, rate limiting e OpenAPI, define a ordem do pipeline e chama os métodos de registro dos endpoints. `Compartilhado/` reúne o que todas as funcionalidades usam: validação, tratamento de exceções e limite de requisições. `AppDbContext` expõe `Produtos` e `Usuarios` e configura tamanhos de coluna, preço `numeric(10,2)` e índice único de e-mail. As entidades representam os registros; os DTOs descrevem entrada/saída e suas regras. A API nunca devolve entidades, apenas DTOs de resposta.
+`Program.cs` registra banco, autenticação, autorização, Problem Details, rate limiting e OpenAPI, define a ordem do pipeline e chama os métodos de registro dos endpoints. `Compartilhado/` reúne o que todas as funcionalidades usam: validação, tratamento de exceções, limite de requisições, paginação, filtro de texto e políticas de acesso. `AppDbContext` expõe `Produtos`, `Usuarios`, `Categorias`, `Clientes`, `Pedidos` e `ItensPedido` e configura tamanhos de coluna, preços `numeric(10,2)`, enums como texto, chaves estrangeiras, `CHECK` e índices. As entidades representam os registros; os DTOs descrevem entrada/saída e suas regras. A API nunca devolve entidades, apenas DTOs de resposta.
 
 Para entender o projeto em profundidade:
 
 | Documento | Conteúdo |
 | --- | --- |
 | [docs/arquitetura.md](docs/arquitetura.md) | Camadas, caminho de uma requisição, ordem do pipeline, formato de erro |
-| [docs/autenticacao.md](docs/autenticacao.md) | Fluxo do login, proteções e o ataque que cada uma evita |
-| [docs/decisoes.md](docs/decisoes.md) | ADRs: por que Minimal API, cookie, Supabase só como banco, etc. |
+| [docs/autenticacao.md](docs/autenticacao.md) | Fluxo do login, papéis, proteções e o ataque que cada uma evita |
+| [docs/decisoes.md](docs/decisoes.md) | ADRs: por que Minimal API, cookie, Supabase só como banco, papéis, soft delete, preço congelado, etc. |
+| [docs/fases-2-4.md](docs/fases-2-4.md) | Contrato das fases 2–4: telas, rotas, regras R1–R47 |
 
 O SDK inclui os arquivos `.cs` automaticamente; não é necessário listá-los no `.csproj` nem criar um equivalente ao `__init__.py`. `bin/` e `obj/` são gerados e ignorados pelo Git.
 
@@ -176,6 +191,14 @@ dotnet user-secrets set "ConnectionStrings:DefaultConnection" 'Host=SEU_HOST;Por
 ```
 
 Cada integrante configura seu próprio segredo local. Ele não acompanha `git clone` nem `git pull`. O identificador no `.csproj` pode ser versionado; a senha, não. User Secrets fica fora do repositório e não é um cofre criptografado. Consulte a [documentação da Microsoft](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-10.0).
+
+Para ter um **Admin** (quem gerencia categorias, desativa produtos, exclui clientes e cancela pedido confirmado), guarde também o e-mail dele. Quem entrar com esse e-mail vira Admin no login; todos os outros são Operador. **Atenção:** o cadastro recusa o e-mail de `Admin:Email`; se o usuário do Admin ainda não existe, cadastre-o primeiro ([passo 7](#7-primeiro-acesso-e-confirmação)) e só depois rode:
+
+```powershell
+dotnet user-secrets set "Admin:Email" "seu-email@exemplo.com" --project MyCRUD/MyCRUD.csproj
+```
+
+Em produção, use a variável de ambiente `Admin__Email`. Sem essa configuração a API funciona, mas registra o aviso `Nenhum Admin configurado (Admin:Email).` e ninguém consegue as ações de Admin. Depois de configurar, quem já estava logado precisa sair e entrar de novo.
 
 Se a senha tiver `;` ou outros caracteres especiais da string de conexão, o valor precisa ser corretamente delimitado conforme o formato Npgsql. Uma aspa simples dentro do comando PowerShell deve ser duplicada. Não cole comandos preenchidos com credenciais em commits, prints ou mensagens.
 
@@ -262,7 +285,9 @@ Espere `Now listening on: http://localhost:5000`. Deixe esse terminal aberto e u
 
 ### 7. Primeiro acesso e confirmação
 
-Abra `http://localhost:5000/cadastro.html`, crie um usuário e depois entre em `http://localhost:5000/login.html`. O login abre a página de produtos. Cadastre um produto, edite, confira no Supabase e faça logout. Para confirmar persistência, reinicie a API e faça login novamente: os dados devem continuar disponíveis.
+Abra `http://localhost:5000/cadastro.html`, crie um usuário e depois entre em `http://localhost:5000/login.html`. O login abre a tela de Pedidos. Como Admin, cadastre uma categoria; depois um produto, um cliente e um pedido; confira no Supabase e faça logout. Para confirmar persistência, reinicie a API e faça login novamente: os dados devem continuar disponíveis.
+
+**Para ter um Admin:** o cadastro recusa o e-mail configurado em `Admin:Email` (responde "E-mail já cadastrado." para não revelar qual é o e-mail do Admin). Então cadastre o seu usuário **antes** de configurar `Admin:Email` (ou com essa chave vazia), depois rode `dotnet user-secrets set "Admin:Email" "seu-email@exemplo.com" --project MyCRUD/MyCRUD.csproj`, reinicie a API e entre: o login promove o usuário a Admin.
 
 Não existe usuário padrão criado automaticamente. A senha escolhida nesse formulário pertence ao usuário do aplicativo; não é a senha do PostgreSQL nem a senha da conta Supabase.
 
@@ -286,23 +311,28 @@ Substitua o caminho. As variáveis precisam ser definidas novamente em um termin
 | Endereço | Uso |
 | --- | --- |
 | [Página inicial](http://localhost:5000/) | Mensagem de confirmação da API |
-| [Cadastro](http://localhost:5000/cadastro.html) | Criar usuário, com API em Development |
-| [Login](http://localhost:5000/login.html) | Entrar e receber cookie |
-| [Produtos](http://localhost:5000/produtos.html) | Listar, cadastrar, editar e excluir produtos |
-| [JSON de produtos](http://localhost:5000/produtos/) | Consultar lista, após login nesse navegador |
+| [Cadastro](http://localhost:5000/cadastro.html) | Criar usuário (Operador), com API em Development |
+| [Login](http://localhost:5000/login.html) | Entrar e receber cookie; abre Pedidos |
+| [Pedidos](http://localhost:5000/pedidos.html) | Filtrar pedidos, criar pedido com itens e total estimado |
+| Detalhe do pedido (`pedido-detalhe.html?id=N`) | Itens com preço congelado, total, Confirmar / Marcar como entregue / Cancelar |
+| [Clientes](http://localhost:5000/clientes.html) | Buscar por nome ou telefone, cadastrar, editar; excluir (Admin) |
+| [Produtos](http://localhost:5000/produtos.html) | Filtrar por nome, categoria e situação; cadastrar, editar; desativar/reativar (Admin) |
+| [Categorias](http://localhost:5000/categorias.html) | Listar com quantidade de produtos; cadastrar, renomear, excluir (Admin) |
+| [JSON de produtos](http://localhost:5000/produtos/) | Consultar a primeira página, após login nesse navegador |
 | [Scalar](http://localhost:5000/scalar) | Documentação interativa da API (Development) |
 
-Fluxo:
+Todas as telas internas têm o mesmo esqueleto: cabeçalho com menu (Pedidos · Clientes · Produtos · Categorias), nome e papel do usuário e Sair; barra de filtro; lista com paginador ("1–20 de 57"); formulário à direita (empilha abaixo de 960 px). Botões só de Admin somem para o Operador — isso é só conforto visual: a API recusa com `403` e a tela mostra "Você não tem permissão para esta ação.".
 
-1. Abra cadastro, informe nome, e-mail e senha de oito ou mais caracteres.
-2. Após a confirmação, volte ao login e entre com os mesmos dados.
-3. O login redireciona para produtos.
-4. Informe nome, preço e ID numérico de categoria e clique em Cadastrar.
-5. Confira o registro na tabela e no Table Editor do Supabase, schema `public`.
-6. Clique em Editar para preencher o formulário, altere os campos e clique em Salvar alterações. Cancelar edição volta ao cadastro sem gravar mudanças.
-7. Use Atualizar lista para consultar novamente e Excluir para remover após confirmação.
+Fluxo de um pedido:
 
-A interface usa HTML e JavaScript sem framework de frontend. Cadastro e produtos não têm CSS; o arquivo de login atualmente ainda contém um bloco de CSS inline. A página de produtos permite editar nome, preço, categoria e estado ativo. O botão Sair chama o logout e redireciona para o login.
+1. (Admin) Em Categorias, cadastre "Bolos". Em Produtos, cadastre "Bolo de cenoura" nessa categoria.
+2. Em Clientes, cadastre um cliente; o telefone aceita máscara, `(19) 99999-0000`, e é salvo só com dígitos.
+3. Em Pedidos, escolha o cliente, a data de entrega (hoje ou depois) e os itens; o total estimado usa o preço atual.
+4. Criar pedido abre o detalhe: o preço de cada item fica congelado a partir daqui.
+5. Confirmar → Marcar como entregue. Cancelar: qualquer usuário cancela pedido Aberto; pedido Confirmado só o Admin.
+6. Altere o preço do produto e reabra o pedido: o total não muda.
+
+A interface usa HTML, CSS (`css/app.css`) e JavaScript sem framework. Texto vindo da API entra sempre por `textContent`.
 
 As páginas e a API são servidas pelo mesmo ASP.NET. Abra pelos endereços HTTP, não diretamente como arquivos do computador.
 
@@ -312,28 +342,63 @@ Com a API em Development, abra `http://localhost:5000/scalar`. A página lista t
 
 Para testar rotas protegidas: execute `POST /login` pelo Scalar; o cookie fica no navegador e é enviado nas chamadas seguintes. O documento bruto fica em `/openapi/v1.json`.
 
+Toda escrita (`POST`, `PUT`, `DELETE`, inclusive o próprio `POST /login`) precisa do cabeçalho `X-Requested-With` com o valor `fetch`: no Scalar, acrescente-o na aba **Headers** da requisição. Sem ele a resposta é `403` "Requisição sem o cabeçalho X-Requested-With." (proteção anti-CSRF, ver [autenticação](docs/autenticacao.md#anti-csrf-por-cabeçalho-r44)).
+
 Os textos exibidos vêm dos comentários `///` do código (`GenerateDocumentationFile` no `.csproj`) e dos `.WithSummary(...)` dos endpoints.
 
 ## Rotas e regras
 
-| Método | Caminho | Autenticação | Resultado principal |
+Todas as rotas de dados exigem cookie (`401` sem login). "Admin" = política `SomenteAdmin` (`403` para Operador). Toda escrita (`POST`/`PUT`/`DELETE`) sem o cabeçalho `X-Requested-With: fetch` recebe `403`.
+
+| Método | Caminho | Papel | Resultado principal |
 | --- | --- | --- | --- |
 | GET | `/` | Pública | 200 e mensagem |
-| POST | `/login/cadastro` | Pública, apenas Development | 201; 400, 409 ou 429 |
-| POST | `/login/` | Pública | 200 e cookie; 400, 401 ou 429 |
-| POST | `/login/sair` | Exige cookie | 204 |
-| GET | `/login/eu` | Exige cookie | 200 e usuário da sessão; 401 sem login |
-| GET | `/produtos/` | Exige cookie | 200 e lista |
-| GET | `/produtos/{id:int}` | Exige cookie | 200 ou 404 |
-| POST | `/produtos/` | Exige cookie | 201 ou 400 |
-| PUT | `/produtos/{id:int}` | Exige cookie | 200, 400 ou 404 |
-| DELETE | `/produtos/{id:int}` | Exige cookie | 204 ou 404 |
+| POST | `/login/cadastro` | Pública, apenas Development | 201 (sempre Operador); 400, 409 ou 429 |
+| POST | `/login/` | Pública | 200, usuário com `papel` e cookie; 400, 401 ou 429 |
+| POST | `/login/sair` | Logado | 204 |
+| GET | `/login/eu` | Logado | 200 e usuário da sessão com `papel` |
+| GET | `/produtos?nome=&categoriaId=&situacao=&pagina=&tamanho=` | Logado | 200 página (`situacao`: `Ativos` padrão, `Inativos`, `Todos`) |
+| GET | `/produtos/{id}` | Logado | 200 ou 404 (ativo ou inativo) |
+| POST | `/produtos/` | Logado | 201; 400 (inclui categoria inexistente) |
+| PUT | `/produtos/{id}` | Logado | 200, 400 ou 404 — **não altera `ativo`** |
+| DELETE | `/produtos/{id}` | Admin | 204 — **desativa**, idempotente; 404 |
+| POST | `/produtos/{id}/reativar` | Admin | 204, idempotente; 404 |
+| GET | `/categorias?nome=&pagina=&tamanho=` | Logado | 200 página, com `quantidadeProdutos` |
+| GET | `/categorias/{id}` | Logado | 200 ou 404 |
+| POST | `/categorias/` | Admin | 201; 400, 409 nome duplicado |
+| PUT | `/categorias/{id}` | Admin | 200; 400, 404, 409 nome duplicado |
+| DELETE | `/categorias/{id}` | Admin | 204; 404, 409 possui produtos |
+| GET | `/clientes?busca=&pagina=&tamanho=` | Logado | 200 página (busca no nome ou nos dígitos do telefone) |
+| GET | `/clientes/{id}` | Logado | 200 ou 404 |
+| POST | `/clientes/` | Logado | 201 ou 400 |
+| PUT | `/clientes/{id}` | Logado | 200, 400 ou 404 |
+| DELETE | `/clientes/{id}` | Admin | 204; 404, 409 possui pedidos |
+| GET | `/pedidos?busca=&status=&de=&ate=&pagina=&tamanho=` | Logado | 200 página de resumos |
+| GET | `/pedidos/{id}` | Logado | 200 detalhe ou 404 |
+| POST | `/pedidos/` | Logado | 201 detalhe + `Location`; 400 |
+| POST | `/pedidos/{id}/confirmar` | Logado | 200 detalhe; 404, 409 |
+| POST | `/pedidos/{id}/entregar` | Logado | 200 detalhe; 404, 409 |
+| POST | `/pedidos/{id}/cancelar` | Logado; Admin se Confirmado | 200 detalhe; 403, 404, 409 |
+
+Não existe `PUT` nem `DELETE` de pedido. As listagens devolvem sempre o mesmo envelope:
+
+```json
+{ "itens": [ ... ], "pagina": 1, "tamanhoPagina": 20, "total": 57, "totalPaginas": 3 }
+```
+
+`pagina` vai de 1 a 1.000.000 e `tamanho` de 1 a 100 (padrão 20); fora disso, `400`. Página além do fim devolve `itens: []` com o `total` real. Filtros de texto são "contém", sem diferenciar maiúsculas, e `%`/`_` são buscados literalmente. Enums trafegam como texto (`"Aberto"`, `"Admin"`); datas de entrega como `"2026-11-20"`; `criadoEm` em UTC.
 
 ### Dados
 
-Produto: `Id` inteiro gerado pelo banco, `Nome` até 120 caracteres, `Preco` decimal `numeric(10,2)`, `CategoriaId` inteiro e `Ativo` booleano. O cadastro define `Ativo = true`; a atualização aceita esse campo. Produtos inativos também aparecem na listagem, ordenada por ID. Nome vazio/branco, nome acima de 120 caracteres, preço menor ou igual a zero e `CategoriaId` menor que 1 são rejeitados com `400`. O nome é salvo sem espaços nas pontas. A existência da categoria ainda não é verificada (não há tabela de categorias).
+Categoria: `Id`, `Nome` até 60 caracteres, único sem diferenciar maiúsculas ("Bolos" = "bolos").
 
-Usuário: `Id`, `Nome` (até 120), `Email` (até 254, formato validado), `SenhaHash`. O cadastro exige senha entre 8 e 128 caracteres, salva o e-mail em minúsculas e sem espaços, verifica duplicidade e salva o hash. A resposta expõe somente ID, nome e e-mail.
+Produto: `Id`, `Nome` até 120, `Preco` `numeric(10,2)` maior que zero, `CategoriaId` de uma categoria existente (senão `400 errors.CategoriaId`) e `Ativo`. Nasce ativo; só muda por `DELETE` (desativa) e `reativar`. Nenhum produto é apagado do banco. A resposta inclui `categoriaNome`.
+
+Cliente: `Id`, `Nome` até 120, `Telefone` com DDD (10 ou 11 dígitos; a máscara é aceita e removida; não precisa ser único), `Email` opcional (`null`, ou válido até 254, salvo em minúsculas). Sem CPF.
+
+Pedido: `Id`, `ClienteId`, `DataEntrega` (de hoje até hoje + 365 dias no fuso de São Paulo), `Status` (`Aberto`, `Confirmado`, `Entregue`, `Cancelado`; padrão `Aberto` no banco), `CriadoEm` (`now()` do banco) e itens. Auditoria: o detalhe traz `criadoPorNome`, `statusAlteradoEm` e `statusAlteradoPorNome` (os dois últimos `null` até a primeira mudança de status); cada transição também vai para o log com Ids e status. Cada item tem `ProdutoId` (produto ativo, sem repetir no pedido), `Quantidade` 1–999 e `PrecoUnitario`, que a API copia do produto — o cliente nunca envia preço. `Total` e `Subtotal` são calculados na consulta. Transições: Aberto → Confirmado → Entregue; Aberto → Cancelado (qualquer); Confirmado → Cancelado (Admin). Qualquer outra → `409` "Pedido Entregue não pode ser cancelado.".
+
+Usuário: `Id`, `Nome` (até 120), `Email` (até 254, formato validado), `SenhaHash`, `Papel` (`Operador` padrão ou `Admin`). O cadastro exige senha entre 8 e 128 caracteres, salva o e-mail em minúsculas e sem espaços, verifica duplicidade e salva o hash. A resposta expõe ID, nome, e-mail e papel.
 
 Erros seguem Problem Details. Exemplo de `400`:
 
@@ -343,13 +408,19 @@ Erros seguem Problem Details. Exemplo de `400`:
 
 Detalhes e tabela completa de status em [docs/arquitetura.md](docs/arquitetura.md#formato-de-erro).
 
-Login normaliza o e-mail, verifica o hash (atualizando-o se necessário) e cria claims de ID, nome e e-mail. E-mail inexistente e senha errada recebem a mesma resposta `401`, no mesmo tempo. Login e cadastro aceitam 5 requisições por minuto por IP; a sexta recebe `429`. O cookie `Confeitaria.Auth` é HttpOnly, SameSite=Lax, não persistente, com validade de ticket configurada em duas horas. Fora de Development, exige transporte seguro. Logout remove o cookie; não exclui o usuário.
+Login normaliza o e-mail, verifica o hash (atualizando-o se necessário), promove a Admin se o e-mail for o de `Admin:Email` e cria claims de ID, nome, e-mail e papel. E-mail inexistente e senha errada recebem a mesma resposta `401`, no mesmo tempo. Login e cadastro aceitam 5 requisições por minuto por IP (configurável em `LimiteDeRequisicoes:TentativasPorMinuto`); a sexta recebe `429`. O cookie `Confeitaria.Auth` é HttpOnly, SameSite=Lax, não persistente, com validade de ticket configurada em duas horas sem uso; a cada 5 min ele é conferido no banco e, se o usuário foi apagado ou mudou de papel, a sessão é encerrada (`401`). Fora de Development, exige transporte seguro (HSTS e redirecionamento para HTTPS). Logout remove o cookie; não exclui o usuário. Papéis em detalhe: [docs/autenticacao.md](docs/autenticacao.md#papéis).
 
-O cadastro de usuário responde `201` sem cabeçalho `Location`, porque não existe rota pública de consulta de usuário. Para produtos, `Location` aponta para `/produtos/{id}`.
+O cadastro de usuário responde `201` sem cabeçalho `Location`, porque não existe rota pública de consulta de usuário. Para os demais recursos, `Location` aponta para `/<recurso>/{id}`.
 
 ## Testar pelo PowerShell
 
 O cookie do navegador não é compartilhado com o PowerShell. Use uma WebSession para guardar o cookie e enviá-lo nas chamadas seguintes. Deixe a API rodando no primeiro terminal; execute esta sequência no segundo.
+
+Toda escrita (`Post`, `Put`, `Delete`) leva `-Headers $h`, com o cabeçalho anti-CSRF. Defina-o uma vez:
+
+```powershell
+$h = @{ 'X-Requested-With' = 'fetch' }
+```
 
 ### Cadastro e login
 
@@ -359,62 +430,108 @@ Crie um e-mail de teste novo para não conflitar com usuários anteriores:
 $emailTeste = "teste.$([Guid]::NewGuid().ToString('N'))@example.com"
 $senhaTeste = 'TesteLocal123!'
 $cadastro = @{ nome = 'Usuario de teste'; email = $emailTeste; senha = $senhaTeste } | ConvertTo-Json
-Invoke-RestMethod -Uri 'http://localhost:5000/login/cadastro' -Method Post -ContentType 'application/json' -Body $cadastro
+Invoke-RestMethod -Uri 'http://localhost:5000/login/cadastro' -Method Post -Headers $h -ContentType 'application/json' -Body $cadastro
 
 $login = @{ email = $emailTeste; senha = $senhaTeste } | ConvertTo-Json
-Invoke-RestMethod -Uri 'http://localhost:5000/login/' -Method Post -ContentType 'application/json' -Body $login -SessionVariable sessao
+Invoke-RestMethod -Uri 'http://localhost:5000/login/' -Method Post -Headers $h -ContentType 'application/json' -Body $login -SessionVariable sessao
 ```
 
 Cadastro retorna usuário; login retorna usuário e armazena cookie em `$sessao`. Esses exemplos criam dados reais no banco de teste.
 
+Para os exemplos de Admin (categoria, desativar produto, excluir cliente, cancelar confirmado), use um usuário cujo e-mail esteja em `Admin:Email`. Com um Operador, essas chamadas devolvem `403`.
+
+### Categoria (Admin)
+
+```powershell
+$categoria = Invoke-RestMethod -Uri 'http://localhost:5000/categorias/' -Method Post -Headers $h -ContentType 'application/json' -Body (@{ nome = 'Bolos' } | ConvertTo-Json) -WebSession $sessao
+$idCategoria = $categoria.id
+Invoke-RestMethod -Uri 'http://localhost:5000/categorias?nome=bol' -Method Get -WebSession $sessao
+```
+
+Repetir o cadastro com `'bolos'` devolve `409` "Já existe uma categoria com esse nome.".
+
 ### Cadastrar, listar e buscar produto
 
 ```powershell
-$corpo = @{ nome = 'Bolo de chocolate'; preco = 45.90; categoriaId = 1 } | ConvertTo-Json
-$produto = Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Post -ContentType 'application/json' -Body $corpo -WebSession $sessao
+$corpo = @{ nome = 'Bolo de chocolate'; preco = 45.90; categoriaId = $idCategoria } | ConvertTo-Json
+$produto = Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Post -Headers $h -ContentType 'application/json' -Body $corpo -WebSession $sessao
 $idProduto = $produto.id
 $produto
 
-Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Get -WebSession $sessao
+$pagina = Invoke-RestMethod -Uri 'http://localhost:5000/produtos?nome=chocolate&tamanho=10' -Method Get -WebSession $sessao
+$pagina.total
+$pagina.itens
 Invoke-RestMethod -Uri "http://localhost:5000/produtos/$idProduto" -Method Get -WebSession $sessao
 ```
 
-Use o ID devolvido, não suponha que será `1`. IDs excluídos não são necessariamente reutilizados. GET por ID recebe o ID na URL, sem JSON no corpo.
+Use o ID devolvido, não suponha que será `1`. A listagem devolve o envelope paginado: os produtos ficam em `.itens`. GET por ID recebe o ID na URL, sem JSON no corpo.
 
 ### Atualizar
 
 ```powershell
-$alteracao = @{ nome = 'Bolo grande'; preco = 65.90; categoriaId = 1; ativo = $true } | ConvertTo-Json
-Invoke-RestMethod -Uri "http://localhost:5000/produtos/$idProduto" -Method Put -ContentType 'application/json' -Body $alteracao -WebSession $sessao
+$alteracao = @{ nome = 'Bolo grande'; preco = 65.90; categoriaId = $idCategoria } | ConvertTo-Json
+Invoke-RestMethod -Uri "http://localhost:5000/produtos/$idProduto" -Method Put -Headers $h -ContentType 'application/json' -Body $alteracao -WebSession $sessao
 ```
+
+O `PUT` não recebe `ativo`: se o campo for enviado, é ignorado. Ativar e desativar têm rotas próprias, só de Admin.
 
 ### Validar rejeição
 
 ```powershell
-$invalido = @{ nome = ''; preco = -10; categoriaId = 1 } | ConvertTo-Json
-Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Post -ContentType 'application/json' -Body $invalido -WebSession $sessao
+$invalido = @{ nome = ''; preco = -10; categoriaId = 9999 } | ConvertTo-Json
+Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Post -Headers $h -ContentType 'application/json' -Body $invalido -WebSession $sessao
 ```
 
-Esperado: erro HTTP 400 com `errors.Nome` e `errors.Preco`. O PowerShell apresenta respostas 4xx como erros; nesse teste a rejeição é o resultado esperado. Para ver o corpo do erro:
+Esperado: erro HTTP 400 com `errors.Nome` e `errors.Preco` (a categoria só é conferida depois que o formato está válido; com nome e preço corretos, viria `errors.CategoriaId`). O PowerShell apresenta respostas 4xx como erros; nesse teste a rejeição é o resultado esperado. Para ver o corpo do erro:
 
 ```powershell
-try { Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Post -ContentType 'application/json' -Body $invalido -WebSession $sessao }
+try { Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Post -Headers $h -ContentType 'application/json' -Body $invalido -WebSession $sessao }
 catch { $_.ErrorDetails.Message }
 ```
 
-### Excluir e confirmar
+Paginação fora do limite também é rejeitada: `http://localhost:5000/produtos?tamanho=101` → 400.
+
+### Desativar e reativar (Admin)
 
 ```powershell
-Invoke-WebRequest -Uri "http://localhost:5000/produtos/$idProduto" -Method Delete -WebSession $sessao -UseBasicParsing | Select-Object StatusCode
-Invoke-RestMethod -Uri "http://localhost:5000/produtos/$idProduto" -Method Get -WebSession $sessao
+Invoke-WebRequest -Uri "http://localhost:5000/produtos/$idProduto" -Method Delete -Headers $h -WebSession $sessao -UseBasicParsing | Select-Object StatusCode
+(Invoke-RestMethod -Uri "http://localhost:5000/produtos/$idProduto" -Method Get -WebSession $sessao).ativo
+Invoke-RestMethod -Uri 'http://localhost:5000/produtos?situacao=Inativos' -Method Get -WebSession $sessao
+Invoke-WebRequest -Uri "http://localhost:5000/produtos/$idProduto/reativar" -Method Post -Headers $h -WebSession $sessao -UseBasicParsing | Select-Object StatusCode
 ```
 
-Esperado: 204 na exclusão e 404 na busca posterior.
+Esperado: 204, `False`, o produto na lista de inativos, 204. O `DELETE` não apaga a linha: o produto continua existindo para os pedidos antigos. Repetir qualquer um dos dois devolve 204 de novo.
+
+### Cliente
+
+```powershell
+$cliente = Invoke-RestMethod -Uri 'http://localhost:5000/clientes/' -Method Post -Headers $h -ContentType 'application/json' -Body (@{ nome = 'Maria Souza'; telefone = '(19) 99999-0000'; email = $null } | ConvertTo-Json) -WebSession $sessao
+$cliente.telefone
+Invoke-RestMethod -Uri 'http://localhost:5000/clientes?busca=9999' -Method Get -WebSession $sessao
+```
+
+Esperado: telefone `19999990000` (só dígitos). E-mail vazio deve ir como `$null`; texto vazio é recusado.
+
+### Pedido
+
+```powershell
+$amanha = (Get-Date).AddDays(1).ToString('yyyy-MM-dd')
+$novoPedido = @{ clienteId = $cliente.id; dataEntrega = $amanha; itens = @(@{ produtoId = $idProduto; quantidade = 2 }) } | ConvertTo-Json -Depth 3
+$pedido = Invoke-RestMethod -Uri 'http://localhost:5000/pedidos/' -Method Post -Headers $h -ContentType 'application/json' -Body $novoPedido -WebSession $sessao
+$pedido.status
+$pedido.total
+
+Invoke-RestMethod -Uri "http://localhost:5000/pedidos/$($pedido.id)/confirmar" -Method Post -Headers $h -WebSession $sessao
+Invoke-RestMethod -Uri "http://localhost:5000/pedidos/$($pedido.id)/entregar" -Method Post -Headers $h -WebSession $sessao
+Invoke-RestMethod -Uri "http://localhost:5000/pedidos?status=Entregue&de=$amanha" -Method Get -WebSession $sessao
+```
+
+Esperado: `Aberto` e o total (2 × preço do produto); depois `Confirmado` e `Entregue`. `-Depth 3` é necessário para o `ConvertTo-Json` não achatar a lista de itens. O pedido não aceita campo de preço. Confirmar de novo devolve `409` "Pedido Entregue não pode ser confirmado.". Agora o cliente tem pedido: `DELETE /clientes/{id}` devolve `409` "Cliente possui pedidos.".
 
 ### Logout e acesso bloqueado
 
 ```powershell
-Invoke-WebRequest -Uri 'http://localhost:5000/login/sair' -Method Post -WebSession $sessao -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri 'http://localhost:5000/login/sair' -Method Post -Headers $h -WebSession $sessao -UseBasicParsing | Select-Object StatusCode
 Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Get -WebSession $sessao
 ```
 
@@ -443,6 +560,36 @@ SELECT lower(btrim("Email")), count(*) FROM "Usuarios" GROUP BY 1 HAVING count(*
 
 Se retornar linhas, há e-mails que só diferem por maiúsculas; resolva antes, ou a migration falha (sem alterar nada, pois roda em transação).
 
+Fase 2 — cinco migrations, aplicadas em ordem (`database update` aplica todas):
+
+| Migration | O que faz | Dados existentes |
+| --- | --- | --- |
+| `AdicionarPapelUsuario` | Coluna `Papel` (`'Operador'` por padrão) + `CHECK`; liga RLS em `Produtos`, `Usuarios` e `__EFMigrationsHistory` | Todos viram Operador; o Admin é promovido no 1º login |
+| `CriarCategorias` | Tabela `Categorias` (+ `CHECK` de nome, RLS), índice único `lower("Nome")`, FK `Produtos.CategoriaId` RESTRICT | Cada `CategoriaId` já usado vira a categoria "Categoria N" com o mesmo Id; renomeie depois pela tela |
+| `CriarClientes` | Tabela `Clientes` + `CHECK`s de telefone, nome e e-mail, índice `(Nome, Id)`, RLS | Tabela nova |
+| `CriarPedidos` | Tabelas `Pedidos` (com auditoria e `DEFAULT`s) e `ItensPedido` + `CHECK`s, FKs RESTRICT, índices, RLS | Tabelas novas |
+| `AdicionarRestricoesProdutos` | `CHECK` de preço > 0 e nome não vazio em `Produtos` | Falha se algum produto antigo violar (ver SELECT abaixo) |
+
+**Antes de aplicar no banco do grupo:**
+
+1. **Pare a API** (todas as instâncias que usam esse banco). A `CriarCategorias` copia os `CategoriaId` existentes e só depois cria a chave estrangeira; um produto gravado nesse intervalo com uma categoria nova faria a migration falhar.
+2. Rode no SQL Editor do Supabase e guarde o resultado:
+
+```sql
+SELECT "CategoriaId", count(*) FROM "Produtos" GROUP BY 1 ORDER BY 1;                    -- categorias que serão criadas
+SELECT "Id", "CategoriaId" FROM "Produtos" WHERE "CategoriaId" <= 0;                     -- deve voltar vazio (senão vira "Categoria 0")
+SELECT "Id", "Nome", "Preco" FROM "Produtos" WHERE "Preco" <= 0 OR btrim("Nome") = '';  -- deve voltar vazio (senão a M5 falha)
+SELECT count(*) FROM "Usuarios";                                                          -- todos virarão Operador
+```
+
+3. Corrija as linhas que os dois SELECTs do meio devolverem (`UPDATE` do preço, do nome ou do `CategoriaId`) e só então rode `dotnet ef database update`.
+
+A `AdicionarRestricoesProdutos` ficou separada de propósito: se um produto antigo violar a regra, só ela falha; as quatro anteriores continuam aplicadas, você corrige o dado e roda `database update` de novo.
+
+**RLS (Row Level Security).** As migrations ligam RLS **sem nenhuma policy** em todas as tabelas. Efeito: a Data API do Supabase (REST com a chave `anon`, que é pública) não lê nem grava nada. A API C# não muda: ela conecta como dona das tabelas, e o dono ignora RLS. No painel do Supabase as tabelas aparecem com o selo "RLS enabled" e nenhuma policy — é o esperado. Motivo completo em [ADR-003](docs/decisoes.md#adr-003).
+
+Essas migrations foram escritas à mão no formato do `dotnet ef` (o ambiente de desenvolvimento delas não tinha .NET). O CI confere o snapshot; se acusar diferença, rode `dotnet ef migrations add Conferencia --project MyCRUD/MyCRUD.csproj`, leia o `Up()` gerado e remova-a com `dotnet ef migrations remove --project MyCRUD/MyCRUD.csproj` depois de corrigir. O índice `lower("Nome")` e o RLS só existem nas migrations (o EF não os modela): crie bancos de teste com `database update`/`Migrate()`, nunca com `EnsureCreated()`.
+
 O GitHub Actions executa `dotnet ef migrations has-pending-model-changes` a cada push: se alguém alterar uma entidade e esquecer a migration, o build fica vermelho.
 
 No Django, pense em `migrations add` como `makemigrations` e `database update` como `migrate`. Gerar uma migration não altera sozinho o Supabase.
@@ -453,11 +600,21 @@ No Django, pense em `migrations add` como `makemigrations` e `database update` c
 | --- | --- |
 | Impossível conectar ao servidor | API rodando, `Now listening`, porta e URL corretas |
 | DefaultConnection não configurada | Variáveis Development no terminal e User Secrets no projeto certo |
-| 401 em produtos | Faça login; no PowerShell envie `-WebSession $sessao` |
+| 401 nas rotas de dados | Faça login; no PowerShell envie `-WebSession $sessao` |
+| 403 "Requisição sem o cabeçalho X-Requested-With." | Escrita sem o cabeçalho anti-CSRF: no PowerShell use `-Headers $h`; no Scalar acrescente `X-Requested-With: fetch` |
+| 403 em rota de Admin | A rota é só de Admin: confira `Admin:Email` e saia e entre de novo (o papel vai no cookie) |
+| 401 de repente, no meio do uso | A sessão foi encerrada pela revalidação (papel mudou ou usuário apagado) ou expirou: entre de novo |
+| 409 "E-mail já cadastrado." no cadastro do Admin | O cadastro recusa o e-mail de `Admin:Email`: cadastre antes de configurá-lo (ver primeiro acesso) |
+| 400 "Dados recusados por uma regra do banco." | Um `CHECK` do banco recusou o valor (raro; a API valida antes). Em Development o `detail` mostra qual |
+| Aviso `Nenhum Admin configurado` | Configure `Admin:Email` nos User Secrets (ou `Admin__Email` em produção) |
+| 409 ao excluir categoria/cliente | Categoria com produtos (inclusive inativos) ou cliente com pedidos não podem ser excluídos |
+| 400 `DataEntrega` ao criar pedido | A data de entrega deve estar entre hoje e hoje + 365 dias (fuso de São Paulo) |
 | 404 no cadastro | Endpoint só existe em Development; confira também versão compilada |
-| 429 no login ou cadastro | Mais de 5 tentativas no último minuto; aguarde |
+| 429 no login ou cadastro | Mais de 5 tentativas no último minuto (ou o valor de `LimiteDeRequisicoes:TentativasPorMinuto`); aguarde |
+| Migration `CriarCategorias` falhou na chave estrangeira | Um produto foi gravado durante a migration: pare a API e rode `database update` de novo |
+| Migration `AdicionarRestricoesProdutos` falhou com `CK_Produtos_...` | Há produto com preço ≤ 0 ou nome vazio: rode o SELECT da seção Migrations, corrija e aplique de novo |
 | 404 em `/scalar` | Scalar só existe em Development |
-| 404 na busca de produto | ID não existe ou rota ainda não está na versão em execução |
+| 404 na busca por ID | ID não existe ou rota ainda não está na versão em execução |
 | 405 | URL existe, mas o método HTTP não foi registrado nessa versão |
 | Executável usado por outro processo | Encerre a instância antiga com Ctrl+C ou pare a depuração no Visual Studio |
 | Namespace EF não encontrado | Confira PackageReference e execute `dotnet restore` |

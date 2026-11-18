@@ -19,6 +19,10 @@ public record LoginDto(
     string Senha);
 
 /// <summary>Dados para <c>POST /login/cadastro</c>.</summary>
+/// <remarks>
+/// De propósito, NÃO existe campo de papel: se existisse, qualquer pessoa poderia
+/// se cadastrar já como Admin. Todo cadastro cria um <see cref="Papel.Operador"/>.
+/// </remarks>
 /// <param name="Nome">Nome de exibição. Até 120 caracteres.</param>
 /// <param name="Email">E-mail válido e ainda não cadastrado.</param>
 /// <param name="Senha">Entre 8 e 128 caracteres.</param>
@@ -40,4 +44,5 @@ public record CriarUsuarioDto(
 /// <param name="Id">Identificador gerado pelo banco.</param>
 /// <param name="Nome">Nome de exibição.</param>
 /// <param name="Email">E-mail normalizado.</param>
-public record UsuarioRespostaDto(int Id, string Nome, string Email);
+/// <param name="Papel">Perfil de acesso; no JSON vem como texto (<c>"Admin"</c> ou <c>"Operador"</c>).</param>
+public record UsuarioRespostaDto(int Id, string Nome, string Email, Papel Papel);

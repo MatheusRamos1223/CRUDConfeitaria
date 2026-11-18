@@ -4,251 +4,95 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Produtos — Confeitaria</title>
+    <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-    <h1>Produtos da confeitaria</h1>
+    <!-- Tela T1 de docs/fases-2-4.md. Layout: filtro → lista → formulário (padrão de tela, seção 1.1). -->
+    <main class="pagina">
+        <div class="titulo-pagina">
+            <h1>Produtos</h1>
+            <span class="subtitulo">Cardápio da confeitaria</span>
+        </div>
 
-    <nav>
-        <span id="usuario-logado"></span>
-        <button id="sair" type="button">Sair</button>
-    </nav>
+        <p id="mensagem" class="mensagem" role="status"></p>
 
-    <h2 id="titulo-formulario">Cadastrar produto</h2>
+        <!-- 1. Barra de filtro → GET /produtos?nome=&categoriaId=&situacao=&pagina=&tamanho= -->
+        <form id="filtro" class="barra-filtro cartao" role="search">
+            <div class="campo campo-busca">
+                <label for="filtro-nome">Nome</label>
+                <input id="filtro-nome" name="nome" maxlength="120" placeholder="Buscar por nome">
+            </div>
+            <div class="campo">
+                <label for="filtro-categoria">Categoria</label>
+                <select id="filtro-categoria" name="categoriaId">
+                    <option value="">Todas</option>
+                </select>
+            </div>
+            <div class="campo">
+                <label for="filtro-situacao">Situação</label>
+                <select id="filtro-situacao" name="situacao">
+                    <option value="Ativos" selected>Ativos</option>
+                    <option value="Inativos">Inativos</option>
+                    <option value="Todos">Todos</option>
+                </select>
+            </div>
+            <div class="botoes">
+                <button class="botao botao-primario" type="submit">Filtrar</button>
+                <button class="botao" type="reset">Limpar</button>
+            </div>
+        </form>
 
-    <form id="form-produto">
-        <p>
-            <label for="nome">Nome:</label>
-            <input id="nome" name="nome" required>
-        </p>
+        <!-- 2. Lista + paginador -->
+        <section class="lista cartao" aria-labelledby="titulo-lista">
+            <div class="lista-cabecalho">
+                <h2 id="titulo-lista">Produtos cadastrados</h2>
+                <span class="contagem" id="contagem"></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Nome</th>
+                        <th scope="col">Categoria</th>
+                        <th scope="col" class="num">Preço</th>
+                        <th scope="col">Situação</th>
+                        <th scope="col"><span class="sr-only">Ações</span></th>
+                    </tr>
+                </thead>
+                <tbody id="linhas"></tbody>
+            </table>
+            <div class="paginador" id="paginador"></div>
+        </section>
 
-        <p>
-            <label for="preco">Preço:</label>
-            <input id="preco" name="preco"
-                   type="number" min="0.01" step="0.01" required>
-        </p>
+        <!-- 3. Formulário + 4. ações → POST /produtos | PUT /produtos/{id} -->
+        <form id="formulario" class="formulario cartao">
+            <h2 id="titulo-formulario">Cadastrar produto</h2>
+            <div class="campo">
+                <label for="nome">Nome</label>
+                <input id="nome" name="nome" maxlength="120" required>
+            </div>
+            <div class="linha-campos">
+                <div class="campo">
+                    <label for="preco">Preço (R$)</label>
+                    <input id="preco" name="preco" type="number" min="0.01" step="0.01" required>
+                </div>
+                <div class="campo">
+                    <label for="categoriaId">Categoria</label>
+                    <select id="categoriaId" name="categoriaId" required>
+                        <option value="">Selecione</option>
+                    </select>
+                </div>
+            </div>
+            <p class="ajuda">Desativar e reativar ficam na lista (apenas Admin).</p>
+            <div class="acoes-formulario">
+                <button id="salvar" class="botao botao-primario" type="submit">Cadastrar</button>
+                <button id="cancelar" class="botao" type="button" hidden>Cancelar</button>
+            </div>
+        </form>
+    </main>
 
-        <p>
-            <label for="categoriaId">ID da categoria:</label>
-            <input id="categoriaId" name="categoriaId"
-                   type="number" min="1" step="1" required>
-        </p>
-
-        <p id="campo-ativo" hidden>
-            <label><input name="ativo" type="checkbox" checked> Ativo</label>
-        </p>
-        <button type="submit">Cadastrar</button>
-        <button id="cancelar" type="button" hidden>Cancelar edição</button>
-    </form>
-
-    <p id="mensagem" role="status"></p>
-
-    <h2>Produtos cadastrados</h2>
-
-    <button id="atualizar" type="button">Atualizar lista</button>
-
-    <table border="1">
-        <thead>
-            <tr>
-                <th scope="col">ID</th>
-                <th scope="col">Nome</th>
-                <th scope="col">Preço</th>
-                <th scope="col">Categoria</th>
-                <th scope="col">Ativo</th>
-                <th scope="col">Ações</th>
-            </tr>
-        </thead>
-        <tbody id="produtos"></tbody>
-    </table>
-    
     <script src="/js/api.js"></script>
-    <script>const formulario = document.querySelector("#form-produto"); // Seleciona o formulário de cadastro de produtos
-        const tabela = document.querySelector("#produtos"); // Seleciona o corpo da tabela onde os produtos serão exibidos
-        const mensagem = document.querySelector("#mensagem"); // Seleciona o elemento onde mensagens de status serão exibidas
-        const titulo = document.querySelector("#titulo-formulario");
-        const campoAtivo = document.querySelector("#campo-ativo");
-        const cancelar = document.querySelector("#cancelar");
-        const salvar = formulario.querySelector('button[type="submit"]');
-        let idEmEdicao = null;
-
-        const sair = document.querySelector("#sair");
-        sair.addEventListener("click", async () => {
-            sair.disabled = true;
-
-            try {
-                const resposta = await fetch("/login/sair", { method: "POST" });
-
-                if (resposta.ok || resposta.status === 401) {
-                    window.location.href = "/login.html";
-                    return;
-                }
-
-                mensagem.textContent = "Não foi possível sair. Tente novamente.";
-            } catch {
-                mensagem.textContent = "Não foi possível conectar ao servidor.";
-            } finally {
-                sair.disabled = false;
-            }
-        });
-
-        function encerrarEdicao() {
-            idEmEdicao = null;
-            formulario.reset();
-            titulo.textContent = "Cadastrar produto";
-            salvar.textContent = "Cadastrar";
-            campoAtivo.hidden = true;
-            cancelar.hidden = true;
-        }
-
-        cancelar.addEventListener("click", () => {
-            encerrarEdicao();
-            mensagem.textContent = "Edição cancelada.";
-        });
-
-        async function carregarProdutos() {
-            const resposta = await fetch("/produtos/");
-
-            if (!resposta.ok) {
-                throw new Error(await mensagemDeErro(
-                    resposta, "Não foi possível carregar os produtos."));
-            }
-
-            const produtos = await resposta.json(); // Converte a resposta em JSON
-            tabela.replaceChildren();
-
-            // textContent (e não innerHTML) impede que um nome de produto com <script> seja executado.
-            for (const produto of produtos) {
-                const linha = document.createElement("tr");
-
-                const valores = [
-                    produto.id,
-                    produto.nome,
-                    Number(produto.preco).toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL"
-                    }),
-                    produto.categoriaId,
-                    produto.ativo ? "Sim" : "Não"
-                ];
-
-                for (const valor of valores) { // Itera sobre os valores do produto e cria células na tabela
-                    const celula = document.createElement("td");
-                    celula.textContent = valor;
-                    linha.appendChild(celula);
-                }
-
-                const acoes = document.createElement("td");
-                const editar = document.createElement("button");
-                editar.type = "button";
-                editar.textContent = "Editar";
-                editar.addEventListener("click", () => {
-                    if (salvar.disabled) return;
-                    idEmEdicao = produto.id;
-                    formulario.elements.nome.value = produto.nome;
-                    formulario.elements.preco.value = produto.preco;
-                    formulario.elements.categoriaId.value = produto.categoriaId;
-                    formulario.elements.ativo.checked = produto.ativo;
-                    titulo.textContent = `Editar produto ${produto.id}`;
-                    salvar.textContent = "Salvar alterações";
-                    campoAtivo.hidden = false;
-                    cancelar.hidden = false;
-                    mensagem.textContent = "";
-                    formulario.elements.nome.focus();
-                });
-                const excluir = document.createElement("button");
-                excluir.type = "button";
-                excluir.textContent = "Excluir";
-
-                excluir.addEventListener("click", async () => {
-                    if (!confirm(`Excluir o produto "${produto.nome}"?`)) {
-                        return;
-                    }
-
-                    excluir.disabled = true;
-
-                    try {
-                        const resposta = await fetch(
-                            `/produtos/${produto.id}`,
-                            { method: "DELETE" }
-                        );
-
-                        if (!resposta.ok) {
-                            throw new Error(await mensagemDeErro(
-                                resposta, "Não foi possível excluir o produto."));
-                        }
-
-                        mensagem.textContent = "Produto excluído.";
-                        if (idEmEdicao === produto.id) encerrarEdicao();
-                        await carregarProdutos();
-                    } catch (erro) {
-                        mensagem.textContent = erro.message;
-                    } finally {
-                        excluir.disabled = false;
-                    }
-                });
-
-                acoes.append(editar, " ", excluir);
-                linha.appendChild(acoes);
-                tabela.appendChild(linha);
-            }
-        }
-
-        formulario.addEventListener("submit", async (evento) => { // Adiciona um ouvinte de evento para o envio do formulário
-            evento.preventDefault(); 
-
-            const botao = formulario.querySelector("button");
-            botao.disabled = true;
-            cancelar.disabled = true;
-            const editando = idEmEdicao !== null;
-
-            try {
-                const resposta = await fetch(editando ? `/produtos/${idEmEdicao}` : "/produtos/", {
-                    method: editando ? "PUT" : "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        nome: formulario.elements.nome.value,
-                        preco: Number(formulario.elements.preco.value),
-                        categoriaId: Number(
-                            formulario.elements.categoriaId.value
-                        ),
-                        ativo: formulario.elements.ativo.checked
-                    })
-                });
-
-                if (!resposta.ok) {
-                    throw new Error(
-                        resposta.status === 404
-                            ? "O produto não existe mais. Cancele a edição e atualize a lista."
-                            : await mensagemDeErro(resposta, "Não foi possível salvar. Confira os dados.")
-                    );
-                }
-
-                encerrarEdicao();
-                mensagem.textContent = editando ? "Produto atualizado." : "Produto cadastrado.";
-                await carregarProdutos();
-            } catch (erro) {
-                mensagem.textContent = erro.message;
-            } finally {
-                botao.disabled = false;
-                cancelar.disabled = false;
-            }
-        });
-
-        async function atualizarLista() { // Função para atualizar a lista de produtos
-            try {
-                await carregarProdutos();
-            } catch (erro) {
-                mensagem.textContent = erro.message;
-            }
-        }
-
-        document.querySelector("#atualizar")
-            .addEventListener("click", atualizarLista);
-
-        // Ao abrir a página: sem sessão, volta para o login; com sessão, mostra o usuário e a lista.
-        exigirLogin().then((usuario) => {
-            if (!usuario) return;
-            document.querySelector("#usuario-logado").textContent = `Olá, ${usuario.nome}`;
-            atualizarLista();
-        });</script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/paginas/produtos.js"></script>
 </body>
 </html>
