@@ -121,3 +121,62 @@ segue o contrato 2.3/2.4 (e acusa erro se o front mandar `ativo` no PUT, `precoU
 | **Erros de console / exceções de página** | **0** | **0** |
 
 O único log de console do Admin é o "Failed to load resource: 409" do teste de duplicado, provocado de propósito.
+
+---
+
+## Correções da Fase 2 (F1, 2026-11-18) — reconferência
+
+Mesma regra: sem compilador. M1–M4 foram **editadas no lugar** (nada aplicado em banco nem publicado) e a M5 foi criada.
+Cada item abaixo foi conferido duas vezes contra a declaração usada.
+
+### Cruzamentos novos
+
+| Uso | Declaração conferida |
+| --- | --- |
+| `user.ObterUsuarioId()` em `PedidoEndpoints.Criar/Confirmar/Entregar/Cancelar` | `Compartilhado/UsuarioLogado.cs` — extensão de `ClaimsPrincipal` (`using MyCRUD.Compartilhado` já existia) |
+| `principal?.TentarObterUsuarioId()` em `ValidacaoDeSessao` | idem, retorna `int?` |
+| `options.Events.OnValidatePrincipal = ValidacaoDeSessao.ValidarAsync` | `static async Task ValidarAsync(CookieValidatePrincipalContext)` → `Func<CookieValidatePrincipalContext, Task>`; `using MyCRUD.Login` já existia no `Program.cs` |
+| `contexto.Options.TimeProvider` | `AuthenticationSchemeOptions.TimeProvider` (`TimeProvider?`, .NET 8+) |
+| `app.UseCabecalhosDeSeguranca()`, `app.UseProtecaoCsrf()` | `this IApplicationBuilder`; corpo `app.Use(async (contexto, proximo) => { ... await proximo(contexto); })` só casa com a sobrecarga `Func<HttpContext, RequestDelegate, Task>` |
+| `IProblemDetailsService.WriteAsync(new ProblemDetailsContext { HttpContext, ProblemDetails })` | `ProblemDetails` de `Microsoft.AspNetCore.Mvc` (`using` adicionado) |
+| `string.Equals(Request.Headers[...], "fetch", StringComparison.Ordinal)` | conversão implícita `StringValues → string?` |
+| `services.AddOptions<RateLimiterOptions>().Configure<IConfiguration>(...)` + `configuracao.GetValue(chave, 5)` | `OptionsBuilder<T>.Configure<TDep>`; `ConfigurationBinder.GetValue<T>(string, T)` |
+| `LimiteDeRequisicoes.TentativasPorMinuto` (removida) | sem usos restantes (`grep`); substituída por `TentativasPorMinutoPadrao` + `ChaveTentativasPorMinuto` |
+| `PostgresErrorCodes.CheckViolation` | `const string "23514"` do Npgsql, mesmo padrão dos outros dois casos do `switch` |
+| `new PedidoDetalheDto(...)` | **12 argumentos** na única projeção (`BuscarDetalheAsync`): + `CriadoPor!.Nome`, `StatusAlteradoEm`, `StatusAlteradoPor == null ? null : StatusAlteradoPor.Nome` (tipo `string?`) |
+| `MudarStatusAsync(db, loggerFactory, id, usuarioId, acao, destino, origens, explicarRecusa:, ct:)` | 3 chamadas; `origens: [StatusPedido.Aberto]` (expressão de coleção → `StatusPedido[]`); `Cancelar` usa `StatusPedido[] origens = ehAdmin ? new[] {...} : new[] {...}` |
+| `ExecuteUpdateAsync(s => s.SetProperty(...).SetProperty(...).SetProperty(...))` | `UpdateSettersBuilder<T>.SetProperty` devolve o próprio builder (encadeável); valores `DateTime?`/`int?` declarados com o tipo da coluna para a inferência de `TProperty` |
+| `ILoggerFactory loggerFactory` nos handlers | serviço do DI, inferido pelo Minimal API; `CreateLogger(typeof(PedidoEndpoints))` (classe estática: mesmo padrão do `LoginEndpoints`) |
+| `Pedido.CriadoPor`/`StatusAlteradoPor` (`Usuario?`) | `using MyCRUD.Login` em `Pedido.cs`; nenhum tipo de `MyCRUD.Login` colide com nomes usados no arquivo |
+| `Cliente.NomeTamanhoMaximo` em `FiltroPedidos` | `using MyCRUD.Clientes` em `PedidoDtos.cs`; `FiltroPedidos` não tem membro chamado `Cliente` |
+| `Categoria.NomeTamanhoMaximo` em `FiltroCategorias` | mesmo namespace |
+| `Range(1, Paginacao.PaginaMaxima)` nos 4 filtros | `const int`; `(1_000_000 − 1) × 100 = 99.999.900 < int.MaxValue` |
+| `IConfiguration configuracao` em `LoginEndpoints.Cadastrar` | serviço do DI; `ChaveEmailAdmin` const da mesma classe |
+| `.HasDefaultValue(StatusPedido.Aberto)`, `.HasDefaultValueSql("now()")` | `PropertyBuilder<T>`; snapshot grava o valor já convertido (`"Aberto"`), igual ao `Papel` |
+
+### Migrations × snapshot (reconferido)
+
+| # | Arquivo | Mudança |
+| --- | --- | --- |
+| M1 | `20261118120000_AdicionarPapelUsuario` | + SQL `ENABLE ROW LEVEL SECURITY` em `Produtos`, `Usuarios`, `__EFMigrationsHistory`; `Down` desliga. Designer **sem mudança** (RLS não é modelo) |
+| M2 | `20261118120100_CriarCategorias` | + `CK_Categorias_Nome` no `CreateTable`; + RLS; `Down` desliga antes do `DropTable`. Designer: + CHECK |
+| M3 | `20261118120200_CriarClientes` | + `CK_Clientes_Email`, `CK_Clientes_Nome`; índice `IX_Clientes_Nome` → `IX_Clientes_Nome_Id`; + RLS. Designer: M2 + estes |
+| M4 | `20261118120300_CriarPedidos` | `Status DEFAULT 'Aberto'`, `CriadoEm DEFAULT now()`, + `CriadoPorId`, `StatusAlteradoEm`, `StatusAlteradoPorId`; + 2 FKs RESTRICT p/ `Usuarios`; `ItensPedido → Pedidos` CASCADE → RESTRICT; `IX_Pedidos_DataEntrega` → `IX_Pedidos_DataEntrega_Id`; + `IX_Pedidos_CriadoPorId`, `IX_Pedidos_StatusAlteradoPorId`; + RLS nas duas. Designer: M3 + estes |
+| M5 | `20261118120400_AdicionarRestricoesProdutos` (nova) | `CK_Produtos_Nome`, `CK_Produtos_Preco`. Designer **idêntico** ao snapshot (conferido com `diff` do corpo do `BuildModel`/`BuildTargetModel`) |
+
+Conferido contra o `OnModelCreating`:
+
+- Snapshot: `CriadoEm` com `.ValueGeneratedOnAdd()` + `.HasDefaultValueSql("now()")`; `Status` com `.ValueGeneratedOnAdd()` + `.HasDefaultValue("Aberto")`; `b.Property<DateTime?>("StatusAlteradoEm")`, `b.Property<int?>("StatusAlteradoPorId")`.
+- Relações de `Pedido`: `HasOne("MyCRUD.Login.Usuario", "CriadoPor")...IsRequired()` e `HasOne("MyCRUD.Login.Usuario", "StatusAlteradoPor")` (sem `IsRequired`, FK `int?`); navegações `Cliente`, `CriadoPor`, `StatusAlteradoPor`.
+- Índices de FK criados por convenção existem no snapshot (`CriadoPorId`, `StatusAlteradoPorId`); `(DataEntrega, Id)` e `(Nome, Id)` compostos.
+- CHECKs do snapshot em ordem alfabética dentro de cada `ToTable`, com o mesmo texto SQL do modelo e das migrations.
+- `CK_Produtos_*` aparecem **só** no Designer da M5 e no snapshot (não nos Designers M2–M4).
+
+### Riscos novos (para o CI e a Fase 3)
+
+1. `has-pending-model-changes` continua sendo o juiz do snapshot escrito à mão (mesma saída do Q4).
+2. `ExecuteUpdateAsync` com três `SetProperty` encadeados — mesmo mecanismo já usado, só mais colunas. Baixo risco.
+3. Anti-CSRF muda o contrato de **todas** as escritas: PowerShell, Scalar e testes precisam do cabeçalho (README, `autenticacao.md`, contrato 4.1). Front: F2 (`api()`).
+4. RLS: se o banco do grupo tiver tabelas de dono diferente do usuário da conexão, o `ALTER TABLE` falha ("must be owner"). Esperado: todas criadas pelo mesmo usuário das migrations. Depois de aplicar, conferir o *Security Advisor* do Supabase (alguma tabela extra do EF, como lock de migrations, pode aparecer sem RLS).
+5. Revalidação de sessão: a 1ª requisição após 5 min faz 1 `SELECT` pela PK e reemite o cookie (`Set-Cookie`). Comportamento de execução; teste previsto na seção 4.1 do contrato.
+
