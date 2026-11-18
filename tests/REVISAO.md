@@ -24,7 +24,7 @@ e validade de cada teste (passaria com a regra quebrada? depende de ordem, reló
 - **Relógio (R35):** `PostConfigure<CookieAuthenticationOptions>` define `TimeProvider`, o mesmo relógio que o handler do cookie e `ValidacaoDeSessao` usam. Só as fábricas derivadas usam o relógio falso; a fábrica compartilhada não é afetada.
 - **Estado compartilhado na coleção "Api":** nenhum teste faz logout, rebaixa ou apaga o Admin/Operador compartilhados; R35 cria usuários próprios. Dados com sufixo único; sem contagens globais. Logins na fábrica compartilhada: bem abaixo do limite de 1000/min.
 - **Paralelismo:** cada fixture tem banco próprio no mesmo contêiner; o limitador de R47 é por host (fábrica própria com limite 5, teste único).
-- **Testcontainers 4:** `new PostgreSqlBuilder("postgres:17-alpine")` existe a partir da 4.10 (`4.*` resolve a mais nova da série 4). **Npgsql:** `PostgresException.SqlState`/`ConstraintName`. **EF:** `GetService<IMigrator>().MigrateAsync(alvo)`, `ExecuteUpdateAsync(s => s.SetProperty(...))` compatível com o `Action<UpdateSettersBuilder<T>>` do EF 10.
+- **Testcontainers 4:** `new PostgreSqlBuilder().WithImage("postgres:17-alpine")` funciona em toda a série 4 (nas versões ≥ 4.10 pode gerar aviso de obsoleto, não erro). **Npgsql:** `PostgresException.SqlState`/`ConstraintName`. **EF:** `GetService<IMigrator>().MigrateAsync(alvo)`, `ExecuteUpdateAsync(s => s.SetProperty(...))` compatível com o `Action<UpdateSettersBuilder<T>>` do EF 10.
 - **Seed (`SeedDemo`):** só roda com `--seed-demo`; não cria o usuário de `Admin:Email` nos bancos de teste (R42 continua válido).
 
 ## Riscos que restam para o CI

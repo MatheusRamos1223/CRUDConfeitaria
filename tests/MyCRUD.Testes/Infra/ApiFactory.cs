@@ -144,7 +144,7 @@ internal static class PostgresCompartilhado
         {
             if (_container is null)
             {
-                var container = new PostgreSqlBuilder("postgres:17-alpine").Build();
+                var container = new PostgreSqlBuilder().WithImage("postgres:17-alpine").Build();
                 await container.StartAsync();
                 _container = container;
             }
