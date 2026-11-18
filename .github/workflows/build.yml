@@ -38,3 +38,37 @@ jobs:
         env:
           ConnectionStrings__DefaultConnection: "Host=localhost;Database=ci;Username=ci;Password=ci"
         run: dotnet ef migrations has-pending-model-changes --project MyCRUD --no-build --configuration Release
+
+  # Testes de integração: sobem a API em memória contra um PostgreSQL real (Testcontainers).
+  # O runner ubuntu-latest já traz Docker; nenhuma configuração extra é necessária.
+  testes:
+    runs-on: ubuntu-latest
+    needs: build
+    # Um teste travado (ex.: contêiner que não sobe) não deve prender o runner por 6 h (padrão).
+    timeout-minutes: 20
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Rodar os testes
+        run: >
+          dotnet test MyCRUD.slnx
+          --configuration Release
+          --logger "trx;LogFileName=testes.trx"
+          --logger "console;verbosity=detailed"
+          --results-directory ./resultados-testes
+
+      # Só em falha: o .trx traz o detalhe de cada teste que quebrou.
+      - name: Guardar resultados dos testes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-testes
+          path: resultados-testes/
+          if-no-files-found: ignore

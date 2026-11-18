@@ -7,6 +7,7 @@ Projeto acadêmico em C# com ASP.NET Core (.NET 10), Minimal APIs e PostgreSQL h
 - [Funcionalidades e limites](#funcionalidades-e-limites)
 - [Tecnologias e estrutura](#tecnologias-e-estrutura)
 - [Configurar e executar](#configurar-e-executar)
+- [Dados de demonstração](#dados-de-demonstração)
 - [Usar pelo navegador](#usar-pelo-navegador)
 - [Documentação interativa (Scalar)](#documentação-interativa-scalar)
 - [Rotas e regras](#rotas-e-regras)
@@ -99,7 +100,8 @@ CRUDConfeitaria/
     │   ├── CabecalhosDeSeguranca.cs  # CSP, nosniff, X-Frame-Options, Referrer-Policy
     │   └── ProtecaoCsrf.cs       # exige X-Requested-With: fetch nas escritas
     ├── Dados/
-    │   └── AppDbContext.cs
+    │   ├── AppDbContext.cs
+    │   └── SeedDemo.cs           # dados de demonstração (--seed-demo)
     ├── Login/                    # Usuario, Papel, LoginDtos, LoginEndpoints, ValidacaoDeSessao
     ├── Produtos/                 # Produto, ProdutoDtos, ProdutoEndpoints
     ├── Categorias/               # Categoria, CategoriaDtos, CategoriaEndpoints
@@ -287,9 +289,9 @@ Espere `Now listening on: http://localhost:5000`. Deixe esse terminal aberto e u
 
 Abra `http://localhost:5000/cadastro.html`, crie um usuário e depois entre em `http://localhost:5000/login.html`. O login abre a tela de Pedidos. Como Admin, cadastre uma categoria; depois um produto, um cliente e um pedido; confira no Supabase e faça logout. Para confirmar persistência, reinicie a API e faça login novamente: os dados devem continuar disponíveis.
 
-**Para ter um Admin:** o cadastro recusa o e-mail configurado em `Admin:Email` (responde "E-mail já cadastrado." para não revelar qual é o e-mail do Admin). Então cadastre o seu usuário **antes** de configurar `Admin:Email` (ou com essa chave vazia), depois rode `dotnet user-secrets set "Admin:Email" "seu-email@exemplo.com" --project MyCRUD/MyCRUD.csproj`, reinicie a API e entre: o login promove o usuário a Admin.
+**Para ter um Admin:** o cadastro recusa o e-mail configurado em `Admin:Email` (responde "E-mail já cadastrado." para não revelar qual é o e-mail do Admin). Então cadastre o seu usuário **antes** de configurar `Admin:Email` (ou com essa chave vazia), depois rode `dotnet user-secrets set "Admin:Email" "seu-email@exemplo.com" --project MyCRUD/MyCRUD.csproj`, reinicie a API e entre: o login promove o usuário a Admin. Alternativa: o [seed de demonstração](#dados-de-demonstração) cria o Admin já com senha.
 
-Não existe usuário padrão criado automaticamente. A senha escolhida nesse formulário pertence ao usuário do aplicativo; não é a senha do PostgreSQL nem a senha da conta Supabase.
+Não existe usuário padrão criado automaticamente (exceto pelo [seed de demonstração](#dados-de-demonstração), que é opcional e roda só quando pedido). A senha escolhida nesse formulário pertence ao usuário do aplicativo; não é a senha do PostgreSQL nem a senha da conta Supabase.
 
 Se usar o banco do grupo, os cadastros, edições e exclusões afetam os dados compartilhados. Um projeto Supabase separado permite testar sem alterar o banco dos colegas.
 
@@ -305,6 +307,40 @@ dotnet run --project MyCRUD/MyCRUD.csproj -- --urls http://localhost:5000
 ```
 
 Substitua o caminho. As variáveis precisam ser definidas novamente em um terminal novo. Se receber mudanças do Git, restaure dependências/ferramentas quando necessário e aplique migrations recebidas conforme combinado com o grupo.
+
+## Dados de demonstração
+
+Para apresentar o sistema com dados realistas, o projeto tem um **seed de demonstração**: uma confeitaria de bairro fictícia com 2 usuários, 5 categorias (Bolos, Tortas, Doces finos, Salgados, Bebidas), 15 produtos (2 inativos), 12 clientes e 25 pedidos com entregas de 10 dias atrás até 14 dias à frente, em todos os status. Código em `MyCRUD/Dados/SeedDemo.cs`; motivo das escolhas em [ADR-017](docs/decisoes.md#adr-017).
+
+No terminal, na raiz `CRUDConfeitaria`:
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+$env:DOTNET_ENVIRONMENT = "Development"
+dotnet user-secrets set "Admin:Email" "seu-email@exemplo.com" --project MyCRUD/MyCRUD.csproj
+dotnet user-secrets set "Demo:Senha" "UMA_SENHA_FORTE" --project MyCRUD/MyCRUD.csproj
+dotnet ef database update --project MyCRUD/MyCRUD.csproj
+dotnet run --project MyCRUD/MyCRUD.csproj -- --seed-demo
+```
+
+Substitua o e-mail e a senha (8 a 128 caracteres). O comando grava os dados e **encerra**, sem subir o servidor; depois inicie a API normalmente ([passo 6](#6-iniciar-o-servidor)) e entre com:
+
+| Usuário | E-mail | Senha |
+| --- | --- | --- |
+| Admin | o de `Admin:Email` | a de `Demo:Senha` |
+| Operador | `operador@exemplo.com` | a de `Demo:Senha` |
+
+Regras do seed:
+
+- **Só em Development.** Em outro ambiente registra erro e sai com código 1, sem gravar nada.
+- **Não aplica migrations.** Se houver migration pendente, recusa e mostra o comando `database update`.
+- **Idempotente.** Se já existe algum pedido no banco, não faz nada (rodar de novo não duplica).
+- **Tudo ou nada.** Uma única transação: qualquer erro desfaz tudo.
+- **Usuário existente é reaproveitado** e **mantém a senha atual** (a `Demo:Senha` só vale para usuários criados pelo seed). Se o usuário de `Admin:Email` existia como Operador, vira Admin. Categoria com o mesmo nome também é reaproveitada.
+- **Reproduzível.** Sorteios com semente fixa (`Random(42)`); as datas são relativas ao dia em que o seed roda (fuso de São Paulo).
+- **Exceção à regra R21:** a API recusa entrega no passado, mas o seed grava direto no banco pedidos já entregues e cancelados, para a demo ter histórico.
+
+Em banco compartilhado do grupo, os dados de demonstração aparecem para todos: prefira um projeto Supabase separado para apresentar.
 
 ## Usar pelo navegador
 

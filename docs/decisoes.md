@@ -266,3 +266,34 @@ Formato: **Contexto → Decisão → Consequências**.
 - ⚠️ Promoção por SQL também derruba a sessão (o usuário entra de novo e já recebe Admin).
 - ⚠️ A renovação a cada 5 min desliza a validade de 2 h a partir do último uso (como o `SlidingExpiration`, já ligado por padrão).
 - ⚠️ Cookies antigos sem a claim de papel são encerrados na primeira revalidação.
+
+---
+
+<a id="adr-017"></a>
+
+## ADR-017 — Seed de demonstração fora das migrations, com exceção à R21
+
+**Contexto.** A apresentação precisa de um banco com cara de uso real: cardápio, clientes e pedidos em todos os status, inclusive histórico (entregues e cancelados). Pela API isso é impossível: a R21 recusa entrega no passado. O usuário Admin também precisa nascer de algum lugar, já que o cadastro recusa o e-mail de `Admin:Email` (R42).
+
+**Decisão.** `MyCRUD/Dados/SeedDemo.cs`, executado por `dotnet run --project MyCRUD/MyCRUD.csproj -- --seed-demo`: grava os dados e encerra, sem subir o servidor.
+- Só em Development (senão `LogError` e código de saída 1).
+- **Não aplica migrations**: se houver pendência, recusa e mostra o comando `dotnet ef database update`.
+- Idempotente: se já existe algum pedido, não faz nada.
+- Uma transação explícita envolve a verificação, as leituras e o único `SaveChangesAsync`.
+- Senha dos usuários novos em `Demo:Senha` (User Secrets, 8–128 caracteres); Admin = `Admin:Email`, Operador = `operador@exemplo.com`. Usuário existente é reaproveitado com a senha que já tinha.
+- `Random(42)` e datas relativas a "hoje" no fuso `America/Sao_Paulo`.
+- **Exceção documentada à R21**: o seed grava direto pelo `AppDbContext`, sem passar pelos endpoints, pedidos com entrega até 10 dias no passado. As demais regras são respeitadas: status coerente com a data (passado → Entregue/Cancelado; hoje ou futuro → Aberto/Confirmado), só produtos ativos nos itens, `PrecoUnitario` = preço do produto, `CriadoEm` antes da entrega e nunca no futuro, auditoria preenchida (R40) com quem pode fazer cada transição (R30).
+
+**Alternativas consideradas.**
+- *Migration com `InsertData`/`HasData`*: a migration roda em todo ambiente, inclusive produção; as datas ficariam congeladas no dia em que a migration foi escrita; a senha teria de estar no código. Migration é para estrutura, não para dados opcionais.
+- *Script SQL avulso*: sem hash de senha (PBKDF2 do `PasswordHasher`), sem as constantes e enums do C#, e fácil de divergir do modelo.
+- *Seed automático na inicialização da API*: popularia um banco por engano ao subir em qualquer ambiente; aqui o seed só roda quando pedido.
+- *Criar os dados chamando a própria API*: respeitaria todas as regras, mas justamente por isso não conseguiria criar o histórico.
+
+**Consequências.**
+- ✅ Demo pronta com um comando, reproduzível e sem segredo no repositório.
+- ✅ Banco de produção protegido duas vezes: ambiente Development obrigatório e nenhuma migration aplicada por conta própria.
+- ✅ Caminho oficial para o Admin existir já com senha, sem furar a R42.
+- ⚠️ Os dados não passam pelos endpoints: uma regra nova na API não vale para o seed automaticamente. Ao mudar regra de pedido, revisar `SeedDemo.cs`.
+- ⚠️ Pedidos com entrega no passado só existem por causa do seed; quem ler o banco precisa saber da exceção à R21 (está neste ADR, no README e no `///` da classe).
+- ⚠️ Em banco compartilhado, os dados de demonstração aparecem para o grupo inteiro.
