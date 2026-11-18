@@ -78,8 +78,8 @@ public static class CategoriaEndpoints
         // ignora maiúsculas; os curingas digitados pelo usuário são escapados.
         if (!string.IsNullOrWhiteSpace(filtro.Nome))
         {
-            var padrao = $"%{EscaparCuringasLike(filtro.Nome.Trim())}%";
-            consulta = consulta.Where(c => EF.Functions.ILike(c.Nome, padrao));
+            var padrao = ConsultaTexto.PadraoContem(filtro.Nome);
+            consulta = consulta.Where(c => EF.Functions.ILike(c.Nome, padrao, ConsultaTexto.CaractereDeEscape));
         }
 
         // R6: ordena por Nome e desempata por Id, para que a paginação
@@ -241,18 +241,4 @@ public static class CategoriaEndpoints
         TypedResults.Problem(
             title: "Já existe uma categoria com esse nome.",
             statusCode: StatusCodes.Status409Conflict);
-
-    /// <summary>
-    /// Escapa os caracteres especiais do LIKE para que sejam buscados literalmente.
-    /// </summary>
-    /// <remarks>
-    /// No LIKE do PostgreSQL, <c>%</c> = qualquer sequência, <c>_</c> = um caractere
-    /// e <c>\</c> é o caractere de escape padrão. Sem isto, buscar "50%" acharia
-    /// "500 g". A barra é escapada primeiro para não duplicar os escapes seguintes.
-    /// </remarks>
-    private static string EscaparCuringasLike(string termo) =>
-        termo
-            .Replace(@"\", @"\\")
-            .Replace("%", @"\%")
-            .Replace("_", @"\_");
 }

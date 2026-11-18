@@ -79,16 +79,16 @@ public static class ClienteEndpoints
 
         if (!string.IsNullOrEmpty(termo))
         {
-            // R5: % e _ são curingas do LIKE; escapados, viram texto comum.
-            var padraoNome = $"%{EscaparCuringasLike(termo)}%";
+            // R5: % e _ são curingas do LIKE; escapados (ConsultaTexto), viram texto comum.
+            var padraoNome = ConsultaTexto.PadraoContem(termo);
             var digitos = Cliente.NormalizarTelefone(termo);
 
             consulta = digitos.Length > 0
                 ? consulta.Where(c =>
-                    EF.Functions.ILike(c.Nome, padraoNome, CaractereDeEscape)
+                    EF.Functions.ILike(c.Nome, padraoNome, ConsultaTexto.CaractereDeEscape)
                     || c.Telefone.Contains(digitos))
                 : consulta.Where(c =>
-                    EF.Functions.ILike(c.Nome, padraoNome, CaractereDeEscape));
+                    EF.Functions.ILike(c.Nome, padraoNome, ConsultaTexto.CaractereDeEscape));
         }
 
         // R6: a ordenação termina em Id para dois clientes com o mesmo nome não
@@ -138,7 +138,7 @@ public static class ClienteEndpoints
         int id, AtualizarClienteDto dto, AppDbContext db, CancellationToken ct)
     {
         // FindAsync carrega COM rastreamento: o SaveChanges gera UPDATE só do que mudou.
-        var cliente = await db.Clientes.FindAsync([id], ct);
+        var cliente = await db.Clientes.FindAsync(new object[] { id }, ct);
 
         if (cliente is null)
         {
@@ -173,7 +173,7 @@ public static class ClienteEndpoints
     private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> Excluir(
         int id, AppDbContext db, CancellationToken ct)
     {
-        var cliente = await db.Clientes.FindAsync([id], ct);
+        var cliente = await db.Clientes.FindAsync(new object[] { id }, ct);
 
         if (cliente is null)
         {
@@ -205,21 +205,4 @@ public static class ClienteEndpoints
 
         return TypedResults.NoContent();
     }
-
-    /// <summary>Caractere usado para escapar curingas no <c>ILIKE ... ESCAPE '\'</c>.</summary>
-    private const string CaractereDeEscape = @"\";
-
-    /// <summary>
-    /// Faz <c>%</c>, <c>_</c> e <c>\</c> digitados pelo usuário serem procurados como texto (R5).
-    /// </summary>
-    /// <remarks>
-    /// Sem isso, buscar "50%" acharia qualquer nome começando com "50", e "_" casaria com
-    /// qualquer caractere. A barra é escapada primeiro, senão as barras inseridas para
-    /// <c>%</c> e <c>_</c> seriam escapadas de novo.
-    /// </remarks>
-    private static string EscaparCuringasLike(string termo) =>
-        termo
-            .Replace(@"\", @"\\")
-            .Replace("%", @"\%")
-            .Replace("_", @"\_");
 }

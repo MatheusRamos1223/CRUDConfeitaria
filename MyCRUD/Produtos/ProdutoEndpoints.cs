@@ -91,9 +91,10 @@ public static class ProdutoEndpoints
 
         if (!string.IsNullOrWhiteSpace(filtro.Nome))
         {
-            // ILIKE = LIKE sem diferenciar maiúsculas (PostgreSQL).
-            var padrao = $"%{EscaparCuringasDoLike(filtro.Nome.Trim())}%";
-            consulta = consulta.Where(p => EF.Functions.ILike(p.Nome, padrao, CaractereDeEscape));
+            // ILIKE = LIKE sem diferenciar maiúsculas (PostgreSQL). R5: os curingas
+            // digitados (%, _) são escapados por ConsultaTexto e buscados literalmente.
+            var padrao = ConsultaTexto.PadraoContem(filtro.Nome);
+            consulta = consulta.Where(p => EF.Functions.ILike(p.Nome, padrao, ConsultaTexto.CaractereDeEscape));
         }
 
         if (filtro.CategoriaId is int categoriaId)
@@ -232,21 +233,4 @@ public static class ProdutoEndpoints
                 [nameof(CriarProdutoDto.CategoriaId)] = ["Categoria não encontrada."]
             },
             title: "Dados inválidos.");
-
-    /// <summary>Caractere que anula o significado especial de <c>%</c> e <c>_</c> no LIKE.</summary>
-    private const string CaractereDeEscape = "\\";
-
-    /// <summary>
-    /// Faz <c>%</c>, <c>_</c> e <c>\</c> digitados pelo usuário valerem como texto comum.
-    /// </summary>
-    /// <remarks>
-    /// Sem isso, buscar "100%" encontraria qualquer nome que comece com "100",
-    /// e "_" casaria com qualquer caractere. A barra é escapada primeiro para não
-    /// duplicar o escape das outras duas.
-    /// </remarks>
-    private static string EscaparCuringasDoLike(string termo) =>
-        termo
-            .Replace(CaractereDeEscape, CaractereDeEscape + CaractereDeEscape)
-            .Replace("%", CaractereDeEscape + "%")
-            .Replace("_", CaractereDeEscape + "_");
 }

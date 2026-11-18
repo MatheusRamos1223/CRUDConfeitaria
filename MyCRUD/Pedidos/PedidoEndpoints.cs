@@ -75,8 +75,9 @@ public static class PedidoEndpoints
 
         if (!string.IsNullOrWhiteSpace(filtro.Busca))
         {
-            var padrao = $"%{EscaparLike(filtro.Busca.Trim())}%";
-            consulta = consulta.Where(p => EF.Functions.ILike(p.Cliente!.Nome, padrao, "\\"));
+            // R5: "contém" no nome do cliente, sem diferenciar maiúsculas, curingas escapados.
+            var padrao = ConsultaTexto.PadraoContem(filtro.Busca);
+            consulta = consulta.Where(p => EF.Functions.ILike(p.Cliente!.Nome, padrao, ConsultaTexto.CaractereDeEscape));
         }
 
         if (filtro.Status is { } status)
@@ -368,14 +369,4 @@ public static class PedidoEndpoints
                     .ToList(),
                 p.Itens.Sum(i => i.Quantidade * i.PrecoUnitario)))
             .FirstOrDefaultAsync(ct);
-
-    /// <summary>
-    /// Escapa os curingas do LIKE (<c>%</c>, <c>_</c>) e o próprio caractere de escape (<c>\</c>),
-    /// para que buscar "50%" procure o texto "50%" e não "50 seguido de qualquer coisa" (R5).
-    /// </summary>
-    private static string EscaparLike(string termo) =>
-        termo
-            .Replace("\\", "\\\\")
-            .Replace("%", "\\%")
-            .Replace("_", "\\_");
 }
