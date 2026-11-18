@@ -17,7 +17,7 @@ namespace MyCRUD.Compartilhado;
 /// <param name="Pagina">Número da página, começando em 1.</param>
 /// <param name="TamanhoPagina">Quantidade máxima de itens por página.</param>
 /// <param name="Total">Total de registros que atendem ao filtro, em todas as páginas.</param>
-public record Pagina<T>(IReadOnlyList<T> Itens, int Pagina, int TamanhoPagina, int Total)
+public record ResultadoPaginado<T>(IReadOnlyList<T> Itens, int Pagina, int TamanhoPagina, int Total)
 {
     /// <summary>Quantidade de páginas; 0 quando não há registros.</summary>
     public int TotalPaginas => Total == 0 ? 0 : (int)Math.Ceiling(Total / (double)TamanhoPagina);
@@ -45,7 +45,7 @@ public static class Paginacao
     /// A consulta recebida <b>já deve estar ordenada</b>; sem <c>OrderBy</c> o banco
     /// não garante a ordem e um registro poderia aparecer em duas páginas.
     /// </remarks>
-    public static async Task<Pagina<T>> PaginarAsync<T>(
+    public static async Task<ResultadoPaginado<T>> PaginarAsync<T>(
         this IQueryable<T> consulta,
         int pagina,
         int tamanho,
@@ -58,6 +58,6 @@ public static class Paginacao
             .Take(tamanho)
             .ToListAsync(ct);
 
-        return new Pagina<T>(itens, pagina, tamanho, total);
+        return new ResultadoPaginado<T>(itens, pagina, tamanho, total);
     }
 }

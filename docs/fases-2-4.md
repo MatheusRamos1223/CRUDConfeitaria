@@ -23,7 +23,7 @@ Ordem do documento: **telas primeiro**, regras derivadas delas, depois o contrat
 
 | # | Decisão | Motivo (1 linha) |
 | --- | --- | --- |
-| D1 | **Paginação + filtros puxados para a Fase 2** | Barra de filtro e paginador fazem parte do padrão de tela; definir `Pagina<T>` agora evita quebrar `GET /produtos` duas vezes. |
+| D1 | **Paginação + filtros puxados para a Fase 2** | Barra de filtro e paginador fazem parte do padrão de tela; definir `ResultadoPaginado<T>` agora evita quebrar `GET /produtos` duas vezes. |
 | D2 | Mudança de status por **rotas de ação** (`/confirmar`, `/entregar`, `/cancelar`) em vez de `PATCH status` | Autorização por rota (cancelar Confirmado = Admin) e erro 409 claro por transição. |
 | D3 | `PUT /produtos/{id}` **deixa de receber `Ativo`**; desativar = `DELETE`, reativar = `POST /produtos/{id}/reativar` (ambos Admin) | Só Admin desativa; com `Ativo` no PUT, um Operador desativaria pelo formulário. |
 | D4 | "Data" do pedido = **`DataEntrega`** (`date`, informada) + **`CriadoEm`** (`timestamptz`, automática) | Confeitaria trabalha por data de entrega; `CriadoEm` registra quando o preço foi congelado. |
@@ -156,9 +156,9 @@ Mesmo esqueleto, largura total (`.pagina-larga`): o lugar da barra de filtro mos
 
 | Membro | Assinatura |
 | --- | --- |
-| Envelope | `public record Pagina<T>(IReadOnlyList<T> Itens, int Pagina, int TamanhoPagina, int Total)` + propriedade calculada `int TotalPaginas` (0 quando `Total == 0`) |
+| Envelope | `public record ResultadoPaginado<T>(IReadOnlyList<T> Itens, int Pagina, int TamanhoPagina, int Total)` + propriedade calculada `int TotalPaginas` (0 quando `Total == 0`) |
 | Constantes | `public static class Paginacao { public const int TamanhoPadrao = 20; public const int TamanhoMaximo = 100; }` |
-| Extensão | `Task<Pagina<T>> PaginarAsync<T>(this IQueryable<T> consulta, int pagina, int tamanho, CancellationToken ct = default)` — faz `CountAsync` + `Skip/Take`; a consulta **já deve vir ordenada** |
+| Extensão | `Task<ResultadoPaginado<T>> PaginarAsync<T>(this IQueryable<T> consulta, int pagina, int tamanho, CancellationToken ct = default)` — faz `CountAsync` + `Skip/Take`; a consulta **já deve vir ordenada** |
 
 **Filtros** são records ligados por `[AsParameters]` e validados com `.ComValidacao<FiltroX>()` (o `ValidacaoFiltro` já encontra o argumento pelo tipo). Todo filtro tem:
 
@@ -283,26 +283,26 @@ Todas exigem login (401 sem cookie). "Admin" = política `SomenteAdmin` (403 par
 | Método | Caminho | Papel | Sucesso | Erros |
 | --- | --- | --- | --- | --- |
 | **Categorias** | | | | |
-| GET | `/categorias?nome=&pagina=&tamanho=` | qualquer | 200 `Pagina<CategoriaRespostaDto>` | 400 |
+| GET | `/categorias?nome=&pagina=&tamanho=` | qualquer | 200 `ResultadoPaginado<CategoriaRespostaDto>` | 400 |
 | GET | `/categorias/{id}` | qualquer | 200 `CategoriaRespostaDto` | 404 |
 | POST | `/categorias` | Admin | 201 + `Location` | 400, 403, 409 nome duplicado |
 | PUT | `/categorias/{id}` | Admin | 200 | 400, 403, 404, 409 nome duplicado |
 | DELETE | `/categorias/{id}` | Admin | 204 | 403, 404, 409 possui produtos |
 | **Produtos** | | | | |
-| GET | `/produtos?nome=&categoriaId=&situacao=&pagina=&tamanho=` | qualquer | 200 `Pagina<ProdutoRespostaDto>` (**era lista**) | 400 |
+| GET | `/produtos?nome=&categoriaId=&situacao=&pagina=&tamanho=` | qualquer | 200 `ResultadoPaginado<ProdutoRespostaDto>` (**era lista**) | 400 |
 | GET | `/produtos/{id}` | qualquer | 200 | 404 |
 | POST | `/produtos` | qualquer | 201 | 400 (inclui categoria inexistente) |
 | PUT | `/produtos/{id}` | qualquer | 200 | 400, 404 |
 | DELETE | `/produtos/{id}` | Admin | 204 (**desativa**, idempotente) | 403, 404 |
 | POST | `/produtos/{id}/reativar` | Admin | 204 (idempotente) | 403, 404 |
 | **Clientes** | | | | |
-| GET | `/clientes?busca=&pagina=&tamanho=` | qualquer | 200 `Pagina<ClienteRespostaDto>` | 400 |
+| GET | `/clientes?busca=&pagina=&tamanho=` | qualquer | 200 `ResultadoPaginado<ClienteRespostaDto>` | 400 |
 | GET | `/clientes/{id}` | qualquer | 200 | 404 |
 | POST | `/clientes` | qualquer | 201 | 400 |
 | PUT | `/clientes/{id}` | qualquer | 200 | 400, 404 |
 | DELETE | `/clientes/{id}` | Admin | 204 | 403, 404, 409 possui pedidos |
 | **Pedidos** | | | | |
-| GET | `/pedidos?busca=&status=&de=&ate=&pagina=&tamanho=` | qualquer | 200 `Pagina<PedidoResumoDto>` | 400 |
+| GET | `/pedidos?busca=&status=&de=&ate=&pagina=&tamanho=` | qualquer | 200 `ResultadoPaginado<PedidoResumoDto>` | 400 |
 | GET | `/pedidos/{id}` | qualquer | 200 `PedidoDetalheDto` | 404 |
 | POST | `/pedidos` | qualquer | 201 `PedidoDetalheDto` + `Location` | 400 |
 | POST | `/pedidos/{id}/confirmar` | qualquer | 200 `PedidoDetalheDto` | 404, 409 |
@@ -445,7 +445,7 @@ Cada arquivo tem **um único dono**. Arquivos compartilhados são do **integrado
 
 | Arquivo | Ação |
 | --- | --- |
-| `MyCRUD/Compartilhado/Paginacao.cs` | Cria `Pagina<T>`, `Paginacao` (constantes + `PaginarAsync`), conforme 2.1 |
+| `MyCRUD/Compartilhado/Paginacao.cs` | Cria `ResultadoPaginado<T>`, `Paginacao` (constantes + `PaginarAsync`), conforme 2.1 |
 | `MyCRUD/Program.cs` | `builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));` |
 
 ### 3.3 Agentes
@@ -463,7 +463,7 @@ Sobreposição: nenhuma. `Produtos/*` é só do A5 (inclui filtro, paginação, 
 
 | Nome | Definido por | Usado por |
 | --- | --- | --- |
-| `MyCRUD.Compartilhado.Pagina<T>`, `Paginacao.TamanhoPadrao`, `Paginacao.TamanhoMaximo`, `PaginarAsync` | Passo 0 | A2, A3, A4, A5 |
+| `MyCRUD.Compartilhado.ResultadoPaginado<T>`, `Paginacao.TamanhoPadrao`, `Paginacao.TamanhoMaximo`, `PaginarAsync` | Passo 0 | A2, A3, A4, A5 |
 | `MyCRUD.Compartilhado.Politicas.SomenteAdmin` (`"SomenteAdmin"`), `AddPoliticasDeAcesso()` | A5 | A2, A3, A4 |
 | `MyCRUD.Login.Papel` | A5 | A5 (política: `RequireRole(nameof(Papel.Admin))`) |
 | `MyCRUD.Categorias.Categoria` (`Id`, `Nome`, `NomeTamanhoMaximo`) | A2 | A5 (`Produto.Categoria`) |
@@ -568,7 +568,7 @@ Novo job `testes` em `.github/workflows/build.yml`, depois de `build`: `dotnet t
 | --- | --- |
 | `README.md` | Funcionalidades e limites atualizados; papéis e `Admin:Email`; seed; como rodar testes; exemplos PowerShell das rotas novas |
 | `docs/arquitetura.md` | Diagrama de camadas com as 4 features; **diagrama ER** (mermaid) Categorias–Produtos–ItensPedido–Pedidos–Clientes, Usuarios; caminho de `POST /pedidos` |
-| `docs/decisoes.md` | ADR-008 papéis por configuração · ADR-009 soft delete de produto · ADR-010 preço congelado e total calculado · ADR-011 envelope `Pagina<T>` · ADR-012 transição de status por UPDATE condicional · ADR-013 Testcontainers em vez de banco em memória |
+| `docs/decisoes.md` | ADR-008 papéis por configuração · ADR-009 soft delete de produto · ADR-010 preço congelado e total calculado · ADR-011 envelope `ResultadoPaginado<T>` · ADR-012 transição de status por UPDATE condicional · ADR-013 Testcontainers em vez de banco em memória |
 | `docs/autenticacao.md` | Papéis, 403, claim de papel e atraso até novo login; remover "não há papéis" dos limites |
 | `docs/telas.md` | Screenshots das telas **reais** (Admin e Operador) com o fluxo de um pedido |
 | `docs/apresentacao.md` | Roteiro de 10 min: problema → arquitetura → demo Operador (cliente → pedido → confirmar) → demo Admin (cancelar, desativar produto, categoria) → testes/CI → decisões; perguntas prováveis da banca |
