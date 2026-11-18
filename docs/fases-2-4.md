@@ -24,7 +24,7 @@ Ordem do documento: **telas primeiro**, regras derivadas delas, depois o contrat
 | # | Decisão | Motivo (1 linha) |
 | --- | --- | --- |
 | D1 | **Paginação + filtros puxados para a Fase 2** | Barra de filtro e paginador fazem parte do padrão de tela; definir `Pagina<T>` agora evita quebrar `GET /produtos` duas vezes. |
-| D2 | Mudança de status por **rotas de ação** (`/confirmar`, `/entregar`, `/cancelar`) em vez de `PATCH status` | Autorização por rota (cancelar = Admin) e erro 409 claro por transição. |
+| D2 | Mudança de status por **rotas de ação** (`/confirmar`, `/entregar`, `/cancelar`) em vez de `PATCH status` | Autorização por rota (cancelar Confirmado = Admin) e erro 409 claro por transição. |
 | D3 | `PUT /produtos/{id}` **deixa de receber `Ativo`**; desativar = `DELETE`, reativar = `POST /produtos/{id}/reativar` (ambos Admin) | Só Admin desativa; com `Ativo` no PUT, um Operador desativaria pelo formulário. |
 | D4 | "Data" do pedido = **`DataEntrega`** (`date`, informada) + **`CriadoEm`** (`timestamptz`, automática) | Confeitaria trabalha por data de entrega; `CriadoEm` registra quando o preço foi congelado. |
 | D5 | Pedido **imutável após criado** (cliente, data, itens). Corrigir = cancelar e criar outro | Mantém a Fase 2 pequena; editar itens exige recalcular preço congelado. |
@@ -40,11 +40,11 @@ Ordem do documento: **telas primeiro**, regras derivadas delas, depois o contrat
 
 | # | Pergunta | Proposta padrão se não houver resposta |
 | --- | --- | --- |
-| Q1 | Cancelar pedido é só Admin, ou Operador também pode cancelar pedido **Aberto**? | Só Admin (alinha com "excluir/desativar só Admin"). |
-| Q2 | Pedido pode ter data de entrega **no passado** (registrar venda já feita)? | Não; só o seed de demo grava datas passadas. |
-| Q3 | Telefone deve ser **único** entre clientes? | Não (família compartilha telefone). |
-| Q4 | Quem roda `dotnet ef migrations add`? O ambiente dos agentes não tem .NET. | Dono/integrador na máquina local; CI confere com `has-pending-model-changes`. |
-| Q5 | Protótipos (`wwwroot/prototipos/`) saem do repositório na Fase 4? | Sim; ficam só os screenshots na documentação. |
+| Q1 | Cancelar pedido é só Admin, ou Operador também pode cancelar pedido **Aberto**? | **Decidido (dono):** Operador cancela Aberto; cancelar Confirmado é só Admin. |
+| Q2 | Pedido pode ter data de entrega **no passado** (registrar venda já feita)? | **Decidido (dono):** não; só o seed de demo grava datas passadas. |
+| Q3 | Telefone deve ser **único** entre clientes? | **Decidido (dono):** não único. |
+| Q4 | Quem roda `dotnet ef migrations add`? O ambiente dos agentes não tem .NET. | **Decidido (dono):** integrador escreve migration + snapshot à mão; CI valida com `has-pending-model-changes`; se divergir, dono roda `dotnet ef` local. |
+| Q5 | Protótipos (`wwwroot/prototipos/`) saem do repositório na Fase 4? | **Padrão adotado:** sim, na Fase 4; screenshots ficam na documentação. |
 
 ---
 
@@ -137,7 +137,7 @@ Mesmo esqueleto, largura total (`.pagina-larga`): o lugar da barra de filtro mos
 | Resumo | Nº + selo de status · Cliente · Telefone · Entrega · Itens · Total · linha do tempo Aberto → Confirmado → Entregue |
 | Lista | Produto · Qtd. · Preço unit. (congelado) · Subtotal · rodapé Total. "Preços fixados em <CriadoEm>". |
 | Formulário | Nenhum (pedido imutável, D5) |
-| Ações | Só as válidas para o status: Aberto → **Confirmar**, **Cancelar** (Admin); Confirmado → **Marcar como entregue**, **Cancelar** (Admin); Entregue/Cancelado → nenhuma ("Pedido finalizado"). Voltar aos pedidos. |
+| Ações | Só as válidas para o status: Aberto → **Confirmar**, **Cancelar** (qualquer); Confirmado → **Marcar como entregue**, **Cancelar** (Admin); Entregue/Cancelado → nenhuma ("Pedido finalizado"). Voltar aos pedidos. |
 | Regras derivadas | R25, R28–R31 |
 
 ---
@@ -307,7 +307,7 @@ Todas exigem login (401 sem cookie). "Admin" = política `SomenteAdmin` (403 par
 | POST | `/pedidos` | qualquer | 201 `PedidoDetalheDto` + `Location` | 400 |
 | POST | `/pedidos/{id}/confirmar` | qualquer | 200 `PedidoDetalheDto` | 404, 409 |
 | POST | `/pedidos/{id}/entregar` | qualquer | 200 `PedidoDetalheDto` | 404, 409 |
-| POST | `/pedidos/{id}/cancelar` | Admin | 200 `PedidoDetalheDto` | 403, 404, 409 |
+| POST | `/pedidos/{id}/cancelar` | Logado; Admin se Confirmado (R30) | 200 `PedidoDetalheDto` | 403, 404, 409 |
 | **Login** (alterações) | | | | |
 | POST | `/login` | anônimo | 200 `UsuarioRespostaDto` **+ papel** | 400, 401, 429 |
 | GET | `/login/eu` | qualquer | 200 `UsuarioRespostaDto` **+ papel** (da claim) | 401 |
@@ -359,7 +359,7 @@ Não existe `DELETE /pedidos/{id}` (R31).
 - **R27** Cliente, data e itens não mudam após a criação (D5).
 - **R28** Só as transições da tabela 2.6; qualquer outra → 409 "Pedido {status} não pode ser {ação}." (ex.: "Pedido Entregue não pode ser cancelado.").
 - **R29** Transição atômica: `ExecuteUpdateAsync` com `WHERE Id = @id AND Status IN (@origens)`; 0 linhas → 404 se o pedido não existe, 409 se o status mudou (outro usuário agiu antes).
-- **R30** Confirmar e entregar: qualquer logado. Cancelar: Admin (Q1).
+- **R30** Confirmar e entregar: qualquer logado. Cancelar pedido **Aberto**: qualquer logado. Cancelar pedido **Confirmado**: só Admin → 403 para Operador (Q1).
 - **R31** Pedido nunca é excluído.
 - **R32** Item mostra o nome **atual** do produto (join); produto desativado continua existindo, então o pedido antigo continua íntegro.
 
@@ -378,7 +378,7 @@ stateDiagram-v2
     [*] --> Aberto: POST /pedidos
     Aberto --> Confirmado: /confirmar (qualquer)
     Confirmado --> Entregue: /entregar (qualquer)
-    Aberto --> Cancelado: /cancelar (Admin)
+    Aberto --> Cancelado: /cancelar (qualquer)
     Confirmado --> Cancelado: /cancelar (Admin)
     Entregue --> [*]
     Cancelado --> [*]
@@ -388,13 +388,14 @@ stateDiagram-v2
 | --- | --- | --- | --- |
 | confirmar | Aberto | Confirmado | qualquer |
 | entregar | Confirmado | Entregue | qualquer |
-| cancelar | Aberto, Confirmado | Cancelado | Admin |
+| cancelar | Aberto | Cancelado | qualquer |
+| cancelar | Confirmado | Cancelado | Admin |
 
 Entregue e Cancelado são finais. Repetir a mesma ação (ex.: confirmar um pedido já Confirmado) → 409 (não é idempotente de propósito: o usuário precisa saber que outra pessoa já agiu).
 
 ### 2.7 Plano de migrations
 
-Uma migration por agente, geradas pelo integrador com `dotnet ef migrations add <Nome> --project MyCRUD` **depois** de colar o trecho de modelo daquele agente, nesta ordem. O CI (`has-pending-model-changes`) confere snapshot × modelo.
+Uma migration por agente, **escritas à mão pelo integrador** (migration + `.Designer.cs` + `AppDbContextModelSnapshot.cs`) no mesmo formato que o `dotnet ef` gera, nesta ordem (Q4). O CI (`has-pending-model-changes`) confere snapshot × modelo.
 
 Antes de aplicar no Supabase, rodar e guardar o resultado:
 
@@ -422,7 +423,7 @@ Todas rodam dentro de transação (PostgreSQL); se uma falhar, nada daquela migr
 | --- | --- | --- |
 | Contrato quebra: `GET /produtos` vira envelope, `PUT` perde `Ativo`, `DELETE` passa a desativar | Front antigo e scripts do README param | Mesma fase atualiza `produtos.html` (A5) e exemplos do README (integrador) |
 | Agentes escrevem C# sem compilar | Erros de nome/tipo entre agentes | Nomes exatos neste contrato; integração em ordem com CI verde a cada passo |
-| Ninguém roda `dotnet ef` no ambiente dos agentes | Migration/snapshot escritos à mão divergem | Q4: gerar na máquina do dono; CI barra divergência |
+| Ninguém roda `dotnet ef` no ambiente dos agentes | Migration/snapshot escritos à mão divergem | Q4: CI barra divergência; dono regenera local se preciso |
 | Papel no cookie fica velho até o próximo login (até 2 h) | Promoção/rebaixamento demora | Documentado (R35); "saia e entre de novo" |
 | `Admin:Email` não configurado | Ninguém gerencia categorias | Warning na inicialização (R36) + README |
 | Em Development, quem se cadastrar com o e-mail do Admin vira Admin | Escalada de privilégio local | Cadastro só existe em Development; documentado |
@@ -518,7 +519,7 @@ Testes previstos (cada um prova uma regra; nada de testar o EF):
 | Teste | Regra |
 | --- | --- |
 | Rota de dados sem cookie → 401 | R1 |
-| Operador em `POST /categorias`, `DELETE /produtos/{id}`, `POST /pedidos/{id}/cancelar` → 403 | R2, R10, R14, R30 |
+| Operador em `POST /categorias`, `DELETE /produtos/{id}`, `POST /pedidos/{id}/cancelar` (pedido Confirmado) → 403; Operador cancela Aberto → 200 | R2, R10, R14, R30 |
 | `tamanho=101` e `pagina=0` → 400; página além do fim → 200 vazio com total | R4 |
 | Filtro com `%` não vira curinga | R5 |
 | Categoria "Bolos" e depois "bolos" → 409 | R8 |
