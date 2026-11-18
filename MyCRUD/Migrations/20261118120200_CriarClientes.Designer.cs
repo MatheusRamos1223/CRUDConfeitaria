@@ -40,7 +40,10 @@ namespace MyCRUD.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Categorias");
+                    b.ToTable("Categorias", t =>
+                        {
+                            t.HasCheckConstraint("CK_Categorias_Nome", "btrim(\"Nome\") <> ''");
+                        });
                 });
 
             modelBuilder.Entity("MyCRUD.Clientes.Cliente", b =>
@@ -67,10 +70,14 @@ namespace MyCRUD.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Nome");
+                    b.HasIndex("Nome", "Id");
 
                     b.ToTable("Clientes", t =>
                         {
+                            t.HasCheckConstraint("CK_Clientes_Email", "\"Email\" = lower(btrim(\"Email\"))");
+
+                            t.HasCheckConstraint("CK_Clientes_Nome", "btrim(\"Nome\") <> ''");
+
                             t.HasCheckConstraint("CK_Clientes_Telefone", "\"Telefone\" ~ '^[0-9]{10,11}$'");
                         });
                 });

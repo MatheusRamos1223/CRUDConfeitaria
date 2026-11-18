@@ -18,6 +18,13 @@ namespace MyCRUD.Migrations
     /// <para>O índice de expressão <c>IX_Categorias_Nome_Minusculo</c> não existe no modelo
     /// do EF (nem no snapshot): por isso os testes criam o banco com <c>Migrate()</c>,
     /// nunca com <c>EnsureCreated()</c>.</para>
+    /// <para><b>Aplicar com a API parada.</b> Entre o <c>INSERT ... SELECT DISTINCT "CategoriaId"</c>
+    /// e a criação da FK, um produto cadastrado por outra conexão com um <c>CategoriaId</c> novo
+    /// faria a FK falhar (e a migration inteira voltar atrás). Antes, rode também
+    /// <c>SELECT "Id", "CategoriaId" FROM "Produtos" WHERE "CategoriaId" &lt;= 0;</c>: Ids 0 ou
+    /// negativos viram "Categoria 0"/"Categoria -1" (funciona, mas é melhor corrigir antes).</para>
+    /// <para>CHECK <c>CK_Categorias_Nome</c>: nome não pode ser vazio nem só espaços.
+    /// RLS ligado sem policies (R38).</para>
     /// </remarks>
     public partial class CriarCategorias : Migration
     {
@@ -36,7 +43,13 @@ namespace MyCRUD.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Categorias", x => x.Id);
+                    table.CheckConstraint("CK_Categorias_Nome", "btrim(\"Nome\") <> ''");
                 });
+
+            // 1b. R38: RLS sem policies — a Data API do Supabase (chave anon) não enxerga a tabela.
+            migrationBuilder.Sql("""
+                ALTER TABLE "Categorias" ENABLE ROW LEVEL SECURITY;
+                """);
 
             // 2. R11: cada CategoriaId já usado vira "Categoria N" com o MESMO Id,
             //    senão a FK do passo 6 falharia para os produtos existentes.
@@ -89,7 +102,12 @@ namespace MyCRUD.Migrations
                 name: "IX_Produtos_CategoriaId",
                 table: "Produtos");
 
-            // IX_Categorias_Nome_Minusculo cai junto com a tabela.
+            // RLS e IX_Categorias_Nome_Minusculo cairiam junto com a tabela; o DISABLE explícito
+            // deixa o Down() simétrico ao Up().
+            migrationBuilder.Sql("""
+                ALTER TABLE "Categorias" DISABLE ROW LEVEL SECURITY;
+                """);
+
             migrationBuilder.DropTable(
                 name: "Categorias");
         }

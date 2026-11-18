@@ -11,10 +11,15 @@ namespace MyCRUD.Migrations
     /// </summary>
     /// <remarks>
     /// <para>Sem coluna de total: o total é calculado na consulta (R25).</para>
-    /// <para>FKs: <c>Pedidos → Clientes</c> e <c>ItensPedido → Produtos</c> são RESTRICT
-    /// (histórico preservado); <c>ItensPedido → Pedidos</c> é CASCADE (item não existe sem pedido).</para>
+    /// <para>Defaults (R26): <c>Status</c> = <c>'Aberto'</c> e <c>CriadoEm</c> = <c>now()</c>.</para>
+    /// <para>Auditoria (R40): <c>CriadoPorId</c> (obrigatório) e <c>StatusAlteradoEm</c> /
+    /// <c>StatusAlteradoPorId</c> (nulos até a 1ª transição), FKs para <c>Usuarios</c>.</para>
+    /// <para>Todas as FKs são RESTRICT: <c>Pedidos → Clientes</c>, <c>Pedidos → Usuarios</c> (2),
+    /// <c>ItensPedido → Produtos</c> e <c>ItensPedido → Pedidos</c> (pedido nunca é excluído, R31;
+    /// o banco recusa em vez de apagar itens em cascata).</para>
     /// <para>O índice único <c>(PedidoId, ProdutoId)</c> também serve à FK <c>PedidoId</c>,
-    /// por isso não há <c>IX_ItensPedido_PedidoId</c> separado.</para>
+    /// por isso não há <c>IX_ItensPedido_PedidoId</c> separado. <c>(DataEntrega, Id)</c> segue a
+    /// ordem da listagem (R6). RLS ligado sem policies nas duas tabelas (R38).</para>
     /// </remarks>
     public partial class CriarPedidos : Migration
     {
@@ -29,8 +34,11 @@ namespace MyCRUD.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     ClienteId = table.Column<int>(type: "integer", nullable: false),
                     DataEntrega = table.Column<DateOnly>(type: "date", nullable: false),
-                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    CriadoEm = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Aberto"),
+                    CriadoEm = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
+                    CriadoPorId = table.Column<int>(type: "integer", nullable: false),
+                    StatusAlteradoEm = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    StatusAlteradoPorId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -40,6 +48,18 @@ namespace MyCRUD.Migrations
                         name: "FK_Pedidos_Clientes_ClienteId",
                         column: x => x.ClienteId,
                         principalTable: "Clientes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Pedidos_Usuarios_CriadoPorId",
+                        column: x => x.CriadoPorId,
+                        principalTable: "Usuarios",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Pedidos_Usuarios_StatusAlteradoPorId",
+                        column: x => x.StatusAlteradoPorId,
+                        principalTable: "Usuarios",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
@@ -65,7 +85,7 @@ namespace MyCRUD.Migrations
                         column: x => x.PedidoId,
                         principalTable: "Pedidos",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_ItensPedido_Produtos_ProdutoId",
                         column: x => x.ProdutoId,
@@ -73,6 +93,12 @@ namespace MyCRUD.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
+
+            // R38: RLS sem policies — a Data API do Supabase (chave anon) não enxerga as tabelas.
+            migrationBuilder.Sql("""
+                ALTER TABLE "Pedidos" ENABLE ROW LEVEL SECURITY;
+                ALTER TABLE "ItensPedido" ENABLE ROW LEVEL SECURITY;
+                """);
 
             migrationBuilder.CreateIndex(
                 name: "IX_ItensPedido_PedidoId_ProdutoId",
@@ -91,14 +117,29 @@ namespace MyCRUD.Migrations
                 column: "ClienteId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Pedidos_DataEntrega",
+                name: "IX_Pedidos_CriadoPorId",
                 table: "Pedidos",
-                column: "DataEntrega");
+                column: "CriadoPorId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Pedidos_DataEntrega_Id",
+                table: "Pedidos",
+                columns: new[] { "DataEntrega", "Id" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Pedidos_StatusAlteradoPorId",
+                table: "Pedidos",
+                column: "StatusAlteradoPorId");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("""
+                ALTER TABLE "ItensPedido" DISABLE ROW LEVEL SECURITY;
+                ALTER TABLE "Pedidos" DISABLE ROW LEVEL SECURITY;
+                """);
+
             migrationBuilder.DropTable(
                 name: "ItensPedido");
 

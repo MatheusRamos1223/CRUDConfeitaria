@@ -1,4 +1,5 @@
 using MyCRUD.Clientes;
+using MyCRUD.Login;
 
 namespace MyCRUD.Pedidos;
 
@@ -27,6 +28,12 @@ public class Pedido
     public const int StatusTamanhoMaximo = 20;
 
     /// <summary>
+    /// Maior antecedência aceita para a entrega, em dias a partir de hoje (R39).
+    /// Evita pedido com data digitada errada (ex.: 2062 em vez de 2026) parado para sempre na lista.
+    /// </summary>
+    public const int AntecedenciaMaximaDias = 365;
+
+    /// <summary>
     /// Fuso horário da confeitaria, no formato IANA. Funciona em Linux e,
     /// a partir do .NET 6, também em Windows (conversão automática via ICU).
     /// </summary>
@@ -52,16 +59,46 @@ public class Pedido
     /// </summary>
     public DateOnly DataEntrega { get; set; }
 
-    /// <summary>Situação atual. Nasce <see cref="StatusPedido.Aberto"/> (R26).</summary>
+    /// <summary>
+    /// Situação atual. Nasce <see cref="StatusPedido.Aberto"/> (R26); a coluna tem
+    /// <c>DEFAULT 'Aberto'</c>, então até um INSERT feito por SQL manual nasce Aberto.
+    /// </summary>
     public StatusPedido Status { get; set; } = StatusPedido.Aberto;
 
     /// <summary>
-    /// Momento da criação, sempre em UTC (<c>timestamp with time zone</c>).
+    /// Momento da criação, sempre em UTC (<c>timestamp with time zone</c>, <c>DEFAULT now()</c>).
     /// Também marca quando os preços dos itens foram congelados.
     /// </summary>
+    /// <remarks>
+    /// A API não preenche este campo: o EF omite a coluna no INSERT e o <b>relógio do banco</b>
+    /// grava o instante (R26). Depois do <c>SaveChangesAsync</c> o EF lê o valor gerado de volta.
+    /// </remarks>
     public DateTime CriadoEm { get; set; }
 
-    /// <summary>Itens do pedido (relação 1:N, ON DELETE CASCADE).</summary>
+    /// <summary>
+    /// Usuário que criou o pedido (auditoria, R40). FK → <c>Usuarios.Id</c> ON DELETE RESTRICT:
+    /// usuário com pedido não pode ser apagado, para o histórico continuar dizendo quem foi.
+    /// </summary>
+    public int CriadoPorId { get; set; }
+
+    /// <summary>Navegação para quem criou (nome na tela de detalhe).</summary>
+    public Usuario? CriadoPor { get; set; }
+
+    /// <summary>
+    /// Instante (UTC) da última mudança de status. <c>null</c> enquanto o pedido nunca saiu de Aberto.
+    /// </summary>
+    public DateTime? StatusAlteradoEm { get; set; }
+
+    /// <summary>
+    /// Usuário da última mudança de status (auditoria, R40). <c>null</c> junto com
+    /// <see cref="StatusAlteradoEm"/>. FK → <c>Usuarios.Id</c> ON DELETE RESTRICT.
+    /// </summary>
+    public int? StatusAlteradoPorId { get; set; }
+
+    /// <summary>Navegação para quem fez a última mudança de status.</summary>
+    public Usuario? StatusAlteradoPor { get; set; }
+
+    /// <summary>Itens do pedido (relação 1:N, ON DELETE RESTRICT — pedido nunca é excluído, R31).</summary>
     public List<ItemPedido> Itens { get; set; } = [];
 
     /// <summary>

@@ -40,7 +40,10 @@ namespace MyCRUD.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Categorias");
+                    b.ToTable("Categorias", t =>
+                        {
+                            t.HasCheckConstraint("CK_Categorias_Nome", "btrim(\"Nome\") <> ''");
+                        });
                 });
 
             modelBuilder.Entity("MyCRUD.Login.Usuario", b =>

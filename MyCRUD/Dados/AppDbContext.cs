@@ -57,6 +57,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
                 .WithMany()
                 .HasForeignKey(p => p.CategoriaId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // CHECKs da migration AdicionarRestricoesProdutos (M5), separada das demais porque
+            // Produtos é a única tabela antiga com dados reais: o README manda conferir antes
+            // (SELECT ... WHERE "Preco" <= 0 OR btrim("Nome") = '').
+            // btrim só remove espaços; a API já faz Trim() de todo espaço em branco (R3).
+            produto.ToTable(tabela =>
+            {
+                tabela.HasCheckConstraint("CK_Produtos_Nome", "btrim(\"Nome\") <> ''");
+                tabela.HasCheckConstraint("CK_Produtos_Preco", "\"Preco\" > 0");
+            });
         });
 
         modelBuilder.Entity<Usuario>(usuario =>
@@ -97,6 +107,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             // (IX_Categorias_Nome_Minusculo). Por isso NÃO há HasIndex(c => c.Nome) aqui
             // (seria um segundo índice, sensível a maiúsculas) e os testes usam
             // Migrate(), nunca EnsureCreated().
+
+            // O banco recusa nome vazio ou só com espaços, mesmo vindo de SQL manual (R3).
+            categoria.ToTable(tabela => tabela.HasCheckConstraint(
+                "CK_Categorias_Nome",
+                "btrim(\"Nome\") <> ''"));
         });
 
         modelBuilder.Entity<Cliente>(cliente =>
@@ -112,13 +127,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             cliente.Property(c => c.Email)
                 .HasMaxLength(Cliente.EmailTamanhoMaximo);
 
-            // Índice para a listagem, que ordena por Nome (R19): IX_Clientes_Nome.
+            // Índice na MESMA ordem da listagem (R19: ORDER BY "Nome", "Id"):
+            // IX_Clientes_Nome_Id. Com o Id no índice, o banco lê a página já ordenada,
+            // inclusive o desempate, sem um passo extra de ordenação.
             // Telefone NÃO é único (Q3).
-            cliente.HasIndex(c => c.Nome);
+            cliente.HasIndex(c => new { c.Nome, c.Id });
 
-            cliente.ToTable(tabela => tabela.HasCheckConstraint(
-                "CK_Clientes_Telefone",
-                "\"Telefone\" ~ '^[0-9]{10,11}$'"));
+            cliente.ToTable(tabela =>
+            {
+                // E-mail já normalizado (minúsculas, sem espaços nas pontas), como a API grava.
+                // NULL passa: CHECK só recusa quando a condição é FALSE.
+                tabela.HasCheckConstraint(
+                    "CK_Clientes_Email",
+                    "\"Email\" = lower(btrim(\"Email\"))");
+                tabela.HasCheckConstraint(
+                    "CK_Clientes_Nome",
+                    "btrim(\"Nome\") <> ''");
+                tabela.HasCheckConstraint(
+                    "CK_Clientes_Telefone",
+                    "\"Telefone\" ~ '^[0-9]{10,11}$'");
+            });
         });
 
         modelBuilder.Entity<Pedido>(pedido =>
@@ -126,7 +154,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             // Enum gravado como texto ("Aberto"), não como número: legível no banco (D10).
             pedido.Property(p => p.Status)
                 .HasConversion<string>()
-                .HasMaxLength(Pedido.StatusTamanhoMaximo);
+                .HasMaxLength(Pedido.StatusTamanhoMaximo)
+                // DEFAULT 'Aberto' no banco (R26): INSERT por SQL manual também nasce Aberto.
+                .HasDefaultValue(StatusPedido.Aberto);
+
+            // DEFAULT now(): o relógio do BANCO marca a criação (R26). O EF omite a coluna
+            // no INSERT quando o valor em C# é o padrão (DateTime.MinValue) e lê o gerado de volta.
+            pedido.Property(p => p.CriadoEm)
+                .HasDefaultValueSql("now()");
 
             // Cliente com pedido não pode ser excluído (D12): RESTRICT em vez de CASCADE.
             pedido.HasOne(p => p.Cliente)
@@ -134,15 +169,31 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
                 .HasForeignKey(p => p.ClienteId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Itens pertencem ao pedido. Pedido nunca é excluído (R31), mas o CASCADE
-            // documenta que item não existe sem pedido.
+            // Auditoria (R40): quem criou e quem fez a última mudança de status.
+            // Duas FKs para a mesma tabela: por isso cada uma é declarada com a sua
+            // navegação (sem isso o EF não saberia qual navegação usa qual coluna).
+            // RESTRICT: usuário com pedido não pode ser apagado; o histórico não perde o autor.
+            // O EF cria os índices IX_Pedidos_CriadoPorId e IX_Pedidos_StatusAlteradoPorId.
+            pedido.HasOne(p => p.CriadoPor)
+                .WithMany()
+                .HasForeignKey(p => p.CriadoPorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            pedido.HasOne(p => p.StatusAlteradoPor)
+                .WithMany()
+                .HasForeignKey(p => p.StatusAlteradoPorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Itens pertencem ao pedido. RESTRICT (e não CASCADE): pedido nunca é excluído (R31);
+            // se alguém tentar por SQL manual, o banco recusa em vez de apagar os itens junto.
             pedido.HasMany(p => p.Itens)
                 .WithOne()
                 .HasForeignKey(i => i.PedidoId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
-            // Listagem ordena e filtra por data de entrega: IX_Pedidos_DataEntrega.
-            pedido.HasIndex(p => p.DataEntrega);
+            // Índice na MESMA ordem da listagem (R6: ORDER BY "DataEntrega", "Id"):
+            // IX_Pedidos_DataEntrega_Id. Também atende os filtros de/até (1ª coluna).
+            pedido.HasIndex(p => new { p.DataEntrega, p.Id });
 
             // O banco recusa qualquer status fora do enum, mesmo vindo de SQL manual.
             pedido.ToTable(tabela => tabela.HasCheckConstraint(

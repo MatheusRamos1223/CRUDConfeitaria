@@ -29,7 +29,10 @@ public class ItemPedido
     /// <summary>Chave primária, gerada pelo banco (identity).</summary>
     public int Id { get; set; }
 
-    /// <summary>Pedido dono do item. FK com ON DELETE CASCADE.</summary>
+    /// <summary>
+    /// Pedido dono do item. FK com ON DELETE RESTRICT: pedido nunca é excluído (R31), e o
+    /// banco recusa apagar um pedido que tenha itens em vez de levar os itens junto em silêncio.
+    /// </summary>
     public int PedidoId { get; set; }
 
     /// <summary>Produto vendido. FK com ON DELETE RESTRICT.</summary>

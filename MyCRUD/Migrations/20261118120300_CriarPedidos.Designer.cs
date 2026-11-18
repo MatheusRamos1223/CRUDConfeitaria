@@ -40,7 +40,10 @@ namespace MyCRUD.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Categorias");
+                    b.ToTable("Categorias", t =>
+                        {
+                            t.HasCheckConstraint("CK_Categorias_Nome", "btrim(\"Nome\") <> ''");
+                        });
                 });
 
             modelBuilder.Entity("MyCRUD.Clientes.Cliente", b =>
@@ -67,10 +70,14 @@ namespace MyCRUD.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Nome");
+                    b.HasIndex("Nome", "Id");
 
                     b.ToTable("Clientes", t =>
                         {
+                            t.HasCheckConstraint("CK_Clientes_Email", "\"Email\" = lower(btrim(\"Email\"))");
+
+                            t.HasCheckConstraint("CK_Clientes_Nome", "btrim(\"Nome\") <> ''");
+
                             t.HasCheckConstraint("CK_Clientes_Telefone", "\"Telefone\" ~ '^[0-9]{10,11}$'");
                         });
                 });
@@ -163,21 +170,38 @@ namespace MyCRUD.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("CriadoEm")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("CriadoPorId")
+                        .HasColumnType("integer");
 
                     b.Property<DateOnly>("DataEntrega")
                         .HasColumnType("date");
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Aberto");
+
+                    b.Property<DateTime?>("StatusAlteradoEm")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("StatusAlteradoPorId")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ClienteId");
 
-                    b.HasIndex("DataEntrega");
+                    b.HasIndex("CriadoPorId");
+
+                    b.HasIndex("StatusAlteradoPorId");
+
+                    b.HasIndex("DataEntrega", "Id");
 
                     b.ToTable("Pedidos", t =>
                         {
@@ -220,7 +244,7 @@ namespace MyCRUD.Migrations
                     b.HasOne("MyCRUD.Pedidos.Pedido", null)
                         .WithMany("Itens")
                         .HasForeignKey("PedidoId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("MyCRUD.Produtos.Produto", "Produto")
@@ -240,7 +264,22 @@ namespace MyCRUD.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("MyCRUD.Login.Usuario", "CriadoPor")
+                        .WithMany()
+                        .HasForeignKey("CriadoPorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MyCRUD.Login.Usuario", "StatusAlteradoPor")
+                        .WithMany()
+                        .HasForeignKey("StatusAlteradoPorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Cliente");
+
+                    b.Navigation("CriadoPor");
+
+                    b.Navigation("StatusAlteradoPor");
                 });
 
             modelBuilder.Entity("MyCRUD.Produtos.Produto", b =>
