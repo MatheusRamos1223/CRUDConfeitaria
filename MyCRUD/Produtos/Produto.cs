@@ -1,3 +1,5 @@
+using MyCRUD.Categorias;
+
 namespace MyCRUD.Produtos;
 
 /// <summary>
@@ -27,15 +29,28 @@ public class Produto
     public decimal Preco { get; set; }
 
     /// <summary>
-    /// Identificador da categoria. Ainda sem tabela de categorias
-    /// (sem chave estrangeira) — ver "Limites atuais" no README.
+    /// Chave estrangeira para <c>Categorias.Id</c> (<c>ON DELETE RESTRICT</c>):
+    /// o banco recusa produto com categoria inexistente e impede excluir
+    /// uma categoria que ainda tem produtos.
     /// </summary>
     public int CategoriaId { get; set; }
 
-    /// <summary>Produto disponível para venda.</summary>
+    /// <summary>
+    /// Navegação para a categoria. Só vem preenchida quando a consulta pede
+    /// (ex.: <c>p.Categoria!.Nome</c> dentro de um <c>Select</c>, que vira um JOIN).
+    /// </summary>
+    public Categoria? Categoria { get; set; }
+
+    /// <summary>
+    /// Produto disponível para venda. Nenhum produto é apagado do banco:
+    /// "excluir" na API apenas desativa (soft delete), para que pedidos antigos
+    /// continuem apontando para um produto que existe.
+    /// </summary>
+    /// <remarks>Só muda por <c>DELETE /produtos/{id}</c> e <c>POST /produtos/{id}/reativar</c> (Admin).</remarks>
     public bool Ativo { get; set; } = true;
 
     /// <summary>Converte a entidade para o formato devolvido pela API.</summary>
-    public ProdutoRespostaDto ParaResposta() =>
-        new(Id, Nome, Preco, CategoriaId, Ativo);
+    /// <param name="categoriaNome">Nome da categoria, lido do banco por quem chama.</param>
+    public ProdutoRespostaDto ParaResposta(string categoriaNome) =>
+        new(Id, Nome, Preco, CategoriaId, categoriaNome, Ativo);
 }
