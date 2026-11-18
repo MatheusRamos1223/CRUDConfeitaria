@@ -14,7 +14,15 @@ using MyCRUD.Pedidos;
 using MyCRUD.Produtos;
 using Scalar.AspNetCore;
 
-var builder = WebApplication.CreateBuilder(args);
+// "--seed-demo" popula o banco com dados de demonstração e encerra (Dados/SeedDemo.cs).
+// O argumento é retirado antes de chegar ao host: a leitura de linha de comando da
+// configuração trataria "--seed-demo" como chave e "engoliria" o argumento seguinte como valor.
+var semearDemo = args.Contains(SeedDemo.ArgumentoLinhaDeComando);
+var argumentosDoHost = args
+    .Where(argumento => argumento != SeedDemo.ArgumentoLinhaDeComando)
+    .ToArray();
+
+var builder = WebApplication.CreateBuilder(argumentosDoHost);
 
 // ---------------------------------------------------------------------------
 // 1. Banco de dados
@@ -100,6 +108,21 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var app = builder.Build();
+
+// ---------------------------------------------------------------------------
+// Modo seed: roda o seed de demonstração e encerra SEM subir o servidor.
+// ---------------------------------------------------------------------------
+// Só em Development e só com as migrations já aplicadas (as verificações ficam em
+// SeedDemo.ExecutarAsync). O código de saída (0 = ok, 1 = erro) permite usar em scripts.
+if (semearDemo)
+{
+    Environment.ExitCode = await SeedDemo.ExecutarAsync(app);
+
+    // Descartar o app esvazia a fila do log do console antes de o processo terminar
+    // (sem isso, a última mensagem do seed pode não aparecer).
+    await app.DisposeAsync();
+    return;
+}
 
 // ---------------------------------------------------------------------------
 // Pipeline HTTP — a ORDEM importa: cada middleware envolve os seguintes.
