@@ -64,8 +64,9 @@ MyCRUD/
 erDiagram
     Categorias ||--o{ Produtos : "RESTRICT"
     Produtos ||--o{ ItensPedido : "RESTRICT"
-    Pedidos ||--|{ ItensPedido : "CASCADE"
+    Pedidos ||--|{ ItensPedido : "RESTRICT"
     Clientes ||--o{ Pedidos : "RESTRICT"
+    Usuarios ||--o{ Pedidos : "RESTRICT (criou / mudou status)"
 
     Categorias {
         int Id PK
@@ -73,8 +74,8 @@ erDiagram
     }
     Produtos {
         int Id PK
-        varchar120 Nome
-        numeric10_2 Preco
+        varchar120 Nome "CHECK não vazio"
+        numeric10_2 Preco "CHECK > 0"
         int CategoriaId FK
         boolean Ativo "soft delete"
     }
@@ -82,14 +83,17 @@ erDiagram
         int Id PK
         varchar120 Nome
         varchar11 Telefone "só dígitos (CHECK)"
-        varchar254 Email "opcional"
+        varchar254 Email "opcional, CHECK minúsculas"
     }
     Pedidos {
         int Id PK
         int ClienteId FK
         date DataEntrega
-        varchar20 Status "CHECK (4 valores)"
-        timestamptz CriadoEm
+        varchar20 Status "CHECK (4 valores), DEFAULT Aberto"
+        timestamptz CriadoEm "DEFAULT now()"
+        int CriadoPorId FK
+        timestamptz StatusAlteradoEm "nulo até mudar"
+        int StatusAlteradoPorId FK "nulo até mudar"
     }
     ItensPedido {
         int Id PK
@@ -160,12 +164,15 @@ Se algo inesperado acontecer em qualquer etapa (banco fora do ar, bug), o `Trata
 
 | Ordem | Middleware | Por que nessa posição |
 | --- | --- | --- |
-| 1 | `UseExceptionHandler` | Primeiro, para capturar exceções de tudo que vem depois |
-| 2 | `UseStatusCodePages` | Dá corpo Problem Details a 401/404/429 vazios |
-| 3 | `UseStaticFiles` | Serve o HTML sem passar por autenticação |
-| 4 | `UseAuthentication` | Descobre **quem** é o usuário a partir do cookie |
-| 5 | `UseAuthorization` | Decide **se** ele pode acessar a rota |
-| 6 | `UseRateLimiter` | Conta tentativas nas rotas marcadas |
+| 1 | `UseCabecalhosDeSeguranca` | Primeiro, para que toda resposta (inclusive erro e arquivo estático) leve CSP, `nosniff`, `X-Frame-Options` e `Referrer-Policy` |
+| 2 | `UseExceptionHandler` | Captura exceções de tudo que vem depois |
+| 3 | `UseStatusCodePages` | Dá corpo Problem Details a 401/404/429 vazios |
+| 4 | `UseHsts` + `UseHttpsRedirection` (fora de Development) | Força HTTPS antes de servir qualquer coisa |
+| 5 | `UseStaticFiles` | Serve o HTML sem passar por autenticação |
+| 6 | `UseProtecaoCsrf` | Recusa escrita sem `X-Requested-With: fetch` antes de abrir o cookie |
+| 7 | `UseAuthentication` | Descobre **quem** é o usuário a partir do cookie (e o revalida no banco a cada 5 min) |
+| 8 | `UseAuthorization` | Decide **se** ele pode acessar a rota |
+| 9 | `UseRateLimiter` | Conta tentativas nas rotas marcadas |
 
 ## Duas camadas de validação
 
@@ -194,10 +201,10 @@ Toda resposta de erro segue a [RFC 9457 — Problem Details](https://www.rfc-edi
 
 | Status | Quando |
 | --- | --- |
-| 400 | DTO ou filtro inválido, JSON malformado, ou referência inexistente (`errors.CategoriaId`, `errors.ClienteId`, `errors.Itens`) |
+| 400 | DTO ou filtro inválido, JSON malformado, referência inexistente (`errors.CategoriaId`, `errors.ClienteId`, `errors.Itens`) ou `CHECK` do banco violado ("Dados recusados por uma regra do banco.") |
 | 401 | Sem cookie de login, ou e-mail/senha incorretos |
-| 403 | Usuário sem o papel exigido (Operador em rota de Admin) |
+| 403 | Usuário sem o papel exigido (Operador em rota de Admin) ou escrita sem o cabeçalho `X-Requested-With: fetch` |
 | 404 | Registro não encontrado |
 | 409 | Conflito de estado: e-mail ou categoria duplicados, categoria com produtos, cliente com pedidos, transição de status inválida, violação de FK em corrida ("Registro em uso.") |
-| 429 | Mais de 5 tentativas de login/cadastro por minuto no mesmo IP |
+| 429 | Mais de 5 tentativas (configurável) de login/cadastro por minuto no mesmo IP |
 | 500 | Erro inesperado (detalhe técnico apenas em Development) |
