@@ -5,9 +5,12 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using MyCRUD.Categorias;
+using MyCRUD.Clientes;
 using MyCRUD.Compartilhado;
 using MyCRUD.Dados;
 using MyCRUD.Login;
+using MyCRUD.Pedidos;
 using MyCRUD.Produtos;
 using Scalar.AspNetCore;
 
@@ -64,7 +67,9 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+// Autorização com as políticas da aplicação (ex.: Politicas.SomenteAdmin → papel Admin).
+// Substitui o AddAuthorization() simples: registra o mesmo serviço e acrescenta as políticas.
+builder.Services.AddPoliticasDeAcesso();
 
 // ---------------------------------------------------------------------------
 // 3. Erros padronizados (RFC 9457 — Problem Details)
@@ -118,7 +123,12 @@ if (app.Environment.IsDevelopment())
 app.MapGet("/", () => "API da confeitaria funcionando!")
     .ExcludeFromDescription();
 
-app.MapProdutoEndpoints();
+// Cada feature registra as próprias rotas (feature folders).
+// MapLoginEndpoints também avisa no log se Admin:Email não estiver configurado (R36).
 app.MapLoginEndpoints();
+app.MapProdutoEndpoints();
+app.MapCategoriaEndpoints();
+app.MapClienteEndpoints();
+app.MapPedidoEndpoints();
 
 app.Run();

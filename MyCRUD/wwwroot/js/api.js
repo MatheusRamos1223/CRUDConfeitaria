@@ -13,7 +13,7 @@ function irParaLogin() {
 /**
  * Confere se ainda existe sessão ativa (GET /login/eu).
  * Sem sessão, redireciona para o login e devolve null.
- * Com sessão, devolve { id, nome, email }.
+ * Com sessão, devolve { id, nome, email, papel } (papel: "Admin" ou "Operador").
  */
 async function exigirLogin() {
     const resposta = await fetch("/login/eu");
@@ -30,6 +30,7 @@ async function exigirLogin() {
  * Monta a mensagem de erro de uma resposta HTTP que falhou.
  * - 401: sessão expirou → redireciona ao login.
  * - 429: limite de tentativas atingido.
+ * - 403: usuário sem o papel exigido (ex.: Operador em rota de Admin).
  * - 400 com "errors": junta as mensagens de validação de cada campo.
  * - Outros: usa o "title" do Problem Details ou a mensagem padrão.
  */
@@ -41,6 +42,12 @@ async function mensagemDeErro(resposta, mensagemPadrao) {
 
     if (resposta.status === 429) {
         return "Muitas tentativas. Aguarde um minuto e tente de novo.";
+    }
+
+    // A API recusou por falta de permissão (papel). Esconder botões na tela é só
+    // conforto visual: quem decide é a API, e aqui só traduzimos a recusa.
+    if (resposta.status === 403) {
+        return "Você não tem permissão para esta ação.";
     }
 
     try {
