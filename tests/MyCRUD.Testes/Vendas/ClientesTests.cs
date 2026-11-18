@@ -47,6 +47,8 @@ public class ClientesTests(ApiFactory fabrica)
         var resposta = await admin.DeleteAsync($"/clientes/{cliente.Id}");
 
         Assert.Equal(HttpStatusCode.Conflict, resposta.StatusCode);
+        // Título da checagem do endpoint (e não o "Registro em uso." genérico da FK).
+        Assert.Equal("Cliente possui pedidos.", (await resposta.LerProblem()).Title);
         // O cliente continua existindo.
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/clientes/{cliente.Id}")).StatusCode);
     }

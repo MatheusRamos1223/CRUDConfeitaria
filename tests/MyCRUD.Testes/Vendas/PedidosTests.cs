@@ -118,7 +118,7 @@ public class PedidosTests(ApiFactory fabrica)
         var cliente = await admin.CriarClienteAsync();
         var produto = await admin.CriarProdutoNovoAsync();
 
-        var resposta = await admin.PostarPedidoAsync(cliente.Id, Cenario.HojeSp().AddDays(366), (produto.Id, 1));
+        var resposta = await PostarComEntregaEmAsync(admin, cliente.Id, produto.Id, dias: 366);
 
         Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
         var problema = await resposta.LerProblem();
@@ -133,9 +133,29 @@ public class PedidosTests(ApiFactory fabrica)
         var cliente = await admin.CriarClienteAsync();
         var produto = await admin.CriarProdutoNovoAsync();
 
-        var resposta = await admin.PostarPedidoAsync(cliente.Id, Cenario.HojeSp().AddDays(365), (produto.Id, 1));
+        var resposta = await PostarComEntregaEmAsync(admin, cliente.Id, produto.Id, dias: 365);
 
         Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
+    }
+
+    /// <summary>
+    /// POST /pedidos com entrega em hoje (SP) + <paramref name="dias"/>. O servidor calcula o próprio
+    /// "hoje": se a meia-noite de São Paulo passar entre o cálculo do teste e o do servidor, a
+    /// fronteira de 365 dias anda um dia e o teste mentiria. Nesse caso (raro) repete uma vez.
+    /// </summary>
+    private static async Task<HttpResponseMessage> PostarComEntregaEmAsync(
+        HttpClient http, int clienteId, int produtoId, int dias)
+    {
+        for (var tentativa = 1; ; tentativa++)
+        {
+            var hoje = Cenario.HojeSp();
+            var resposta = await http.PostarPedidoAsync(clienteId, hoje.AddDays(dias), (produtoId, 1));
+
+            if (Cenario.HojeSp() == hoje || tentativa == 2)
+            {
+                return resposta;
+            }
+        }
     }
 
     // ------------------------------------------------------------------
