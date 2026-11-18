@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>[Protótipo] Pedidos — Confeitaria</title>
+    <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+    <!-- PROTÓTIPO: dados fictícios, sem chamada à API. Contrato em docs/fases-2-4.md (tela T4). -->
+    <main class="pagina">
+        <div class="titulo-pagina">
+            <h1>Pedidos</h1>
+            <span class="subtitulo">Encomendas por data de entrega</span>
+        </div>
+
+        <p id="mensagem" class="mensagem" role="status"></p>
+
+        <!-- 1. Barra de filtro → GET /pedidos?busca=&status=&de=&ate=&pagina= -->
+        <form class="barra-filtro cartao" role="search">
+            <div class="campo campo-busca">
+                <label for="filtro-busca">Cliente</label>
+                <input id="filtro-busca" name="busca" placeholder="Nome do cliente">
+            </div>
+            <div class="campo">
+                <label for="filtro-status">Status</label>
+                <select id="filtro-status" name="status">
+                    <option value="">Todos</option>
+                    <option>Aberto</option>
+                    <option>Confirmado</option>
+                    <option>Entregue</option>
+                    <option>Cancelado</option>
+                </select>
+            </div>
+            <div class="campo">
+                <label for="filtro-de">Entrega de</label>
+                <input id="filtro-de" name="de" type="date" value="2026-11-17">
+            </div>
+            <div class="campo">
+                <label for="filtro-ate">até</label>
+                <input id="filtro-ate" name="ate" type="date" value="2026-11-30">
+            </div>
+            <div class="botoes">
+                <button class="botao botao-primario" type="submit">Filtrar</button>
+                <button class="botao" type="reset">Limpar</button>
+            </div>
+        </form>
+
+        <!-- 2. Lista + paginador -->
+        <section class="lista cartao" aria-labelledby="titulo-lista">
+            <div class="lista-cabecalho">
+                <h2 id="titulo-lista">Pedidos</h2>
+                <span class="contagem" id="contagem"></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Nº</th>
+                        <th scope="col">Cliente</th>
+                        <th scope="col">Entrega</th>
+                        <th scope="col" class="num">Itens</th>
+                        <th scope="col" class="num">Total</th>
+                        <th scope="col">Status</th>
+                        <th scope="col"><span class="sr-only">Ações</span></th>
+                    </tr>
+                </thead>
+                <tbody id="linhas"></tbody>
+            </table>
+            <div class="paginador" id="paginador"></div>
+        </section>
+
+        <!-- 3. Formulário + 4. ações → POST /pedidos (itens e preços congelados ao salvar) -->
+        <form class="formulario cartao">
+            <h2>Novo pedido</h2>
+            <div class="campo">
+                <label for="clienteId">Cliente</label>
+                <select id="clienteId" name="clienteId" required></select>
+            </div>
+            <div class="campo">
+                <label for="dataEntrega">Data de entrega</label>
+                <input id="dataEntrega" name="dataEntrega" type="date" min="2026-11-17" value="2026-11-21" required>
+            </div>
+
+            <span class="rotulo">Itens</span>
+            <div class="itens-formulario" id="itens"></div>
+            <button class="botao botao-pequeno" type="button">+ Adicionar item</button>
+
+            <div class="total-previsto">
+                <span>Total estimado</span>
+                <span id="total-previsto"></span>
+            </div>
+            <p class="ajuda">Preços atuais do cardápio. O valor fica congelado ao criar o pedido.</p>
+
+            <div class="acoes-formulario">
+                <button class="botao botao-primario" type="submit">Criar pedido</button>
+                <button class="botao" type="reset">Limpar</button>
+            </div>
+        </form>
+    </main>
+
+    <script src="../js/layout.js"></script>
+    <script>
+        const clientes = [
+            { id: 4, nome: "Beatriz Lima" }, { id: 2, nome: "Fernanda Rocha" },
+            { id: 1, nome: "Maria Aparecida Santos" }, { id: 3, nome: "Sofia Martins" }
+        ];
+        const produtosAtivos = [
+            { id: 1, nome: "Bolo de chocolate", preco: 45.9 },
+            { id: 7, nome: "Bolo red velvet", preco: 89.9 },
+            { id: 8, nome: "Bolo de pote — ninho com morango", preco: 14.5 },
+            { id: 19, nome: "Minibolo de limão", preco: 9.5 }
+        ];
+        const itensDoFormulario = [{ produtoId: 7, quantidade: 1 }, { produtoId: 8, quantidade: 6 }];
+
+        const pagina = {
+            itens: [
+                { id: 1042, clienteNome: "Maria Aparecida Santos", dataEntrega: "2026-11-18", quantidadeItens: 11, total: 214.9, status: "Confirmado" },
+                { id: 1047, clienteNome: "Sofia Martins", dataEntrega: "2026-11-19", quantidadeItens: 1, total: 89.9, status: "Aberto" },
+                { id: 1039, clienteNome: "Padaria Pão Quente (revenda)", dataEntrega: "2026-11-19", quantidadeItens: 40, total: 580, status: "Confirmado" },
+                { id: 1048, clienteNome: "Beatriz Lima", dataEntrega: "2026-11-20", quantidadeItens: 2, total: 104.8, status: "Aberto" },
+                { id: 1035, clienteNome: "Rafael Tavares", dataEntrega: "2026-11-17", quantidadeItens: 1, total: 45.9, status: "Entregue" },
+                { id: 1044, clienteNome: "Carlos Menezes", dataEntrega: "2026-11-22", quantidadeItens: 12, total: 114, status: "Cancelado" },
+                { id: 1050, clienteNome: "Fernanda Rocha", dataEntrega: "2026-11-25", quantidadeItens: 7, total: 176.9, status: "Aberto" }
+            ],
+            pagina: 1, tamanhoPagina: 20, total: 7, totalPaginas: 1
+        };
+
+        // Lista
+        const linhas = document.querySelector("#linhas");
+        for (const p of pagina.itens) {
+            const tr = document.createElement("tr");
+            const status = document.createElement("td");
+            status.appendChild(criarSelo(p.status));
+
+            const acoes = document.createElement("td");
+            acoes.className = "acoes";
+            const abrir = document.createElement("a");
+            abrir.className = "botao botao-pequeno";
+            abrir.href = "pedido-detalhe.html";
+            abrir.textContent = "Abrir";
+            acoes.appendChild(abrir);
+
+            tr.append(criarCelula(`#${p.id}`, "id"), criarCelula(p.clienteNome),
+                criarCelula(formatarData(p.dataEntrega)), criarCelula(p.quantidadeItens, "num"),
+                criarCelula(formatarMoeda(p.total), "num"), status, acoes);
+            linhas.appendChild(tr);
+        }
+        document.querySelector("#contagem").textContent = `${pagina.total} no período`;
+        montarPaginador(document.querySelector("#paginador"), pagina, () => {});
+
+        // Formulário
+        const selectCliente = document.querySelector("#clienteId");
+        selectCliente.appendChild(new Option("Selecione…", ""));
+        for (const c of clientes) selectCliente.appendChild(new Option(c.nome, c.id));
+        selectCliente.value = "4";
+
+        const container = document.querySelector("#itens");
+        let total = 0;
+        for (const item of itensDoFormulario) {
+            const linha = document.createElement("div");
+            linha.className = "item-formulario";
+
+            const produto = document.createElement("select");
+            produto.setAttribute("aria-label", "Produto");
+            for (const p of produtosAtivos) {
+                produto.appendChild(new Option(`${p.nome} — ${formatarMoeda(p.preco)}`, p.id));
+            }
+            produto.value = String(item.produtoId);
+
+            const quantidade = document.createElement("input");
+            quantidade.type = "number";
+            quantidade.min = "1";
+            quantidade.max = "999";
+            quantidade.value = item.quantidade;
+            quantidade.setAttribute("aria-label", "Quantidade");
+
+            const remover = criarBotao("✕", "botao-icone botao-perigo");
+            remover.setAttribute("aria-label", "Remover item");
+
+            linha.append(produto, quantidade, remover);
+            container.appendChild(linha);
+            total += produtosAtivos.find((p) => p.id === item.produtoId).preco * item.quantidade;
+        }
+        document.querySelector("#total-previsto").textContent = formatarMoeda(total);
+
+        iniciarLayout({
+            ativo: "pedidos",
+            prototipo: true,
+            usuario: { id: 2, nome: "Bruno Costa", email: "bruno@confeitaria.dev", papel: "Operador" }
+        });
+    </script>
+</body>
+</html>
