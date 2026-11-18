@@ -38,6 +38,13 @@ public static class Paginacao
     public const int TamanhoMaximo = 100;
 
     /// <summary>
+    /// Maior número de página aceito (R4). Sem teto, <c>pagina=2147483647</c> faria
+    /// <c>(pagina - 1) * tamanho</c> estourar o <c>int</c> e virar um OFFSET negativo (erro 500).
+    /// Com 1.000.000 × 100 o cálculo cabe folgado no <c>int</c>.
+    /// </summary>
+    public const int PaginaMaxima = 1_000_000;
+
+    /// <summary>
     /// Conta o total e busca apenas os registros da página pedida.
     /// </summary>
     /// <remarks>

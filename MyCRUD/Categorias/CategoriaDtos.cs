@@ -46,13 +46,15 @@ public record CategoriaRespostaDto(
 /// Ligado à query string com <c>[AsParameters]</c>: cada parâmetro do construtor
 /// vira um parâmetro de consulta com o mesmo nome. Parâmetro ausente usa o valor padrão.
 /// </remarks>
-/// <param name="Nome">Trecho do nome (contém, sem diferenciar maiúsculas). Vazio = sem filtro.</param>
-/// <param name="Pagina">Página pedida, começando em 1.</param>
+/// <param name="Nome">Trecho do nome (contém, sem diferenciar maiúsculas). Vazio = sem filtro. Até 60 caracteres.</param>
+/// <param name="Pagina">Página pedida, de 1 a <see cref="Paginacao.PaginaMaxima"/>.</param>
 /// <param name="Tamanho">Itens por página, de 1 a <see cref="Paginacao.TamanhoMaximo"/>.</param>
 public record FiltroCategorias(
+    // Nenhum nome de categoria é maior que a coluna: termo maior só gastaria o banco.
+    [property: MaxLength(Categoria.NomeTamanhoMaximo, ErrorMessage = "O filtro de nome deve ter no máximo {1} caracteres.")]
     string? Nome,
 
-    [property: Range(1, int.MaxValue, ErrorMessage = "A página deve ser maior ou igual a 1.")]
+    [property: Range(1, Paginacao.PaginaMaxima, ErrorMessage = "A página deve estar entre {1} e {2}.")]
     int Pagina = 1,
 
     [property: Range(1, Paginacao.TamanhoMaximo, ErrorMessage = "O tamanho da página deve estar entre {1} e {2}.")]

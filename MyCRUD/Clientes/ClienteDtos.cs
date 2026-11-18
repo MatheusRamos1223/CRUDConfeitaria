@@ -58,13 +58,13 @@ public record ClienteRespostaDto(int Id, string Nome, string Telefone, string? E
 /// Opcional. Procura o termo no nome (contém, sem diferenciar maiúsculas) <b>ou</b>
 /// os dígitos do termo no telefone. Vazio = sem filtro.
 /// </param>
-/// <param name="Pagina">Página pedida, começando em 1.</param>
+/// <param name="Pagina">Página pedida, de 1 a <see cref="Paginacao.PaginaMaxima"/>.</param>
 /// <param name="Tamanho">Itens por página, de 1 a 100.</param>
 public record FiltroClientes(
     [property: MaxLength(Cliente.NomeTamanhoMaximo, ErrorMessage = "A busca deve ter no máximo {1} caracteres.")]
     string? Busca,
 
-    [property: Range(1, int.MaxValue, ErrorMessage = "A página deve ser 1 ou maior.")]
+    [property: Range(1, Paginacao.PaginaMaxima, ErrorMessage = "A página deve estar entre {1} e {2}.")]
     int Pagina = 1,
 
     [property: Range(1, Paginacao.TamanhoMaximo, ErrorMessage = "O tamanho da página deve estar entre {1} e {2}.")]

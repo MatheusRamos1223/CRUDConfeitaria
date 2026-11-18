@@ -93,7 +93,7 @@ public enum SituacaoProduto
 /// <param name="Nome">Trecho do nome (contém, sem diferenciar maiúsculas). Vazio = sem filtro.</param>
 /// <param name="CategoriaId">Só produtos desta categoria. Ausente = todas.</param>
 /// <param name="Situacao">Ativos (padrão), Inativos ou Todos.</param>
-/// <param name="Pagina">Página pedida, começando em 1.</param>
+/// <param name="Pagina">Página pedida, de 1 a <see cref="Paginacao.PaginaMaxima"/>.</param>
 /// <param name="Tamanho">Itens por página, de 1 a 100.</param>
 public record FiltroProdutos(
     [property: MaxLength(Produto.NomeTamanhoMaximo, ErrorMessage = "O filtro de nome deve ter no máximo {1} caracteres.")]
@@ -106,7 +106,7 @@ public record FiltroProdutos(
     [property: EnumDataType(typeof(SituacaoProduto), ErrorMessage = "Situação inválida. Use Ativos, Inativos ou Todos.")]
     SituacaoProduto Situacao = SituacaoProduto.Ativos,
 
-    [property: Range(1, int.MaxValue, ErrorMessage = "A página deve ser maior ou igual a 1.")]
+    [property: Range(1, Paginacao.PaginaMaxima, ErrorMessage = "A página deve estar entre {1} e {2}.")]
     int Pagina = 1,
 
     [property: Range(1, Paginacao.TamanhoMaximo, ErrorMessage = "O tamanho da página deve estar entre {1} e {2}.")]
