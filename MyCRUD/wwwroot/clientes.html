@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Clientes — Confeitaria</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <!-- Tela T3 (docs/fases-2-4.md). Rotas: GET/POST /clientes, PUT/DELETE /clientes/{id}. -->
+    <main class="pagina">
+        <div class="titulo-pagina">
+            <h1>Clientes</h1>
+            <span class="subtitulo">Quem encomenda com a confeitaria</span>
+        </div>
+
+        <p id="mensagem" class="mensagem" role="status"></p>
+
+        <!-- 1. Barra de filtro → GET /clientes?busca=&pagina= -->
+        <form id="filtro" class="barra-filtro cartao" role="search">
+            <div class="campo campo-busca">
+                <label for="filtro-busca">Nome ou telefone</label>
+                <input id="filtro-busca" name="busca" maxlength="120" placeholder="Ex.: Maria ou 19 9">
+            </div>
+            <div class="botoes">
+                <button class="botao botao-primario" type="submit">Filtrar</button>
+                <button class="botao" type="reset">Limpar</button>
+            </div>
+        </form>
+
+        <!-- 2. Lista + paginador -->
+        <section class="lista cartao" aria-labelledby="titulo-lista">
+            <div class="lista-cabecalho">
+                <h2 id="titulo-lista">Clientes cadastrados</h2>
+                <span class="contagem" id="contagem"></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Nome</th>
+                        <th scope="col">Telefone</th>
+                        <th scope="col">E-mail</th>
+                        <th scope="col"><span class="sr-only">Ações</span></th>
+                    </tr>
+                </thead>
+                <tbody id="linhas"></tbody>
+            </table>
+            <p id="lista-vazia" class="lista-vazia" hidden>Nenhum cliente encontrado.</p>
+            <div class="paginador" id="paginador"></div>
+        </section>
+
+        <!-- 3. Formulário + 4. ações → POST /clientes | PUT /clientes/{id} -->
+        <form id="formulario" class="formulario cartao">
+            <h2 id="titulo-formulario">Novo cliente</h2>
+            <div class="campo">
+                <label for="nome">Nome</label>
+                <input id="nome" name="nome" maxlength="120" required autocomplete="off">
+            </div>
+            <div class="campo">
+                <label for="telefone">Telefone</label>
+                <input id="telefone" name="telefone" type="tel" maxlength="20" required
+                       placeholder="(19) 99999-0000" autocomplete="off">
+                <span class="ajuda">Com DDD. Salvo só com números (10 ou 11 dígitos).</span>
+            </div>
+            <div class="campo">
+                <label for="email">E-mail <span class="opcional">(opcional)</span></label>
+                <input id="email" name="email" type="email" maxlength="254" autocomplete="off">
+            </div>
+            <div class="acoes-formulario">
+                <button id="salvar" class="botao botao-primario" type="submit">Cadastrar</button>
+                <button id="cancelar" class="botao" type="button" hidden>Cancelar</button>
+            </div>
+        </form>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script>
+        // Estado da tela: o que está sendo filtrado, a página atual e o cliente em edição.
+        const estado = { busca: "", pagina: 1, idEmEdicao: null };
+
+        const mensagem = document.querySelector("#mensagem");
+        const filtro = document.querySelector("#filtro");
+        const linhas = document.querySelector("#linhas");
+        const listaVazia = document.querySelector("#lista-vazia");
+        const contagem = document.querySelector("#contagem");
+        const paginador = document.querySelector("#paginador");
+        const formulario = document.querySelector("#formulario");
+        const tituloFormulario = document.querySelector("#titulo-formulario");
+        const salvar = document.querySelector("#salvar");
+        const cancelar = document.querySelector("#cancelar");
+        const campoTelefone = formulario.elements.telefone;
+
+        // -------------------------------------------------------------- lista
+
+        /**
+         * Busca a página atual na API e redesenha a tabela.
+         * Se a página ficou vazia (ex.: excluiu o último cliente da última página),
+         * volta uma página para o usuário não cair numa lista em branco.
+         */
+        async function carregarLista() {
+            const query = montarQuery({ busca: estado.busca, pagina: estado.pagina });
+            const resposta = await fetch(`/clientes${query}`);
+
+            if (!resposta.ok) {
+                throw new Error(await mensagemDeErro(resposta, "Não foi possível carregar os clientes."));
+            }
+
+            const pagina = await resposta.json();
+
+            if (pagina.itens.length === 0 && pagina.pagina > 1) {
+                estado.pagina = Math.max(1, pagina.totalPaginas);
+                return carregarLista();
+            }
+
+            desenharLinhas(pagina.itens);
+            contagem.textContent = pagina.total === 1 ? "1 encontrado" : `${pagina.total} encontrados`;
+            montarPaginador(paginador, pagina, (novaPagina) => {
+                estado.pagina = novaPagina;
+                atualizarLista();
+            });
+        }
+
+        function desenharLinhas(clientes) {
+            linhas.replaceChildren();
+            listaVazia.hidden = clientes.length > 0;
+
+            // Texto vindo da API entra só por textContent (criarCelula/criarBotao):
+            // um nome como "<script>" aparece escrito, e não é executado.
+            for (const cliente of clientes) {
+                const linha = document.createElement("tr");
+                if (cliente.id === estado.idEmEdicao) linha.classList.add("em-edicao");
+
+                const acoes = document.createElement("td");
+                acoes.className = "acoes";
+                acoes.append(
+                    criarBotao("Editar", "", () => iniciarEdicao(cliente)),
+                    // so-admin: some para Operador. É só conforto visual; a API devolve 403.
+                    criarBotao("Excluir", "botao-perigo so-admin", (evento) => excluir(cliente, evento.currentTarget)));
+
+                linha.append(
+                    criarCelula(cliente.id, "id"),
+                    criarCelula(cliente.nome),
+                    criarCelula(formatarTelefone(cliente.telefone)),
+                    criarCelula(cliente.email ?? "—"),
+                    acoes);
+                linhas.appendChild(linha);
+            }
+        }
+
+        /** Carrega a lista mostrando o erro na mensagem, em vez de deixar a promessa rejeitada. */
+        async function atualizarLista() {
+            try {
+                await carregarLista();
+            } catch (erro) {
+                mostrarMensagem(mensagem, erro.message, "erro");
+            }
+        }
+
+        filtro.addEventListener("submit", (evento) => {
+            evento.preventDefault();
+            estado.busca = filtro.elements.busca.value.trim();
+            estado.pagina = 1; // novo filtro sempre começa da primeira página
+            mostrarMensagem(mensagem, "");
+            atualizarLista();
+        });
+
+        // "reset" limpa o campo sozinho; aqui só voltamos o estado e recarregamos.
+        filtro.addEventListener("reset", () => {
+            estado.busca = "";
+            estado.pagina = 1;
+            mostrarMensagem(mensagem, "");
+            atualizarLista();
+        });
+
+        // -------------------------------------------------------------- formulário
+
+        function iniciarEdicao(cliente) {
+            if (salvar.disabled) return; // um envio está em andamento
+
+            estado.idEmEdicao = cliente.id;
+            formulario.elements.nome.value = cliente.nome;
+            campoTelefone.value = formatarTelefone(cliente.telefone);
+            formulario.elements.email.value = cliente.email ?? "";
+
+            tituloFormulario.textContent = `Editar cliente ${cliente.id}`;
+            salvar.textContent = "Salvar alterações";
+            cancelar.hidden = false;
+            formulario.classList.add("editando");
+            marcarLinhaEmEdicao();
+            mostrarMensagem(mensagem, "");
+            formulario.elements.nome.focus();
+        }
+
+        function encerrarEdicao() {
+            estado.idEmEdicao = null;
+            formulario.reset();
+            tituloFormulario.textContent = "Novo cliente";
+            salvar.textContent = "Cadastrar";
+            cancelar.hidden = true;
+            formulario.classList.remove("editando");
+            marcarLinhaEmEdicao();
+        }
+
+        /** Destaca na tabela a linha do cliente em edição (a 1ª célula é o ID). */
+        function marcarLinhaEmEdicao() {
+            for (const linha of linhas.rows) {
+                const id = Number(linha.cells[0].textContent);
+                linha.classList.toggle("em-edicao", id === estado.idEmEdicao);
+            }
+        }
+
+        cancelar.addEventListener("click", () => {
+            encerrarEdicao();
+            mostrarMensagem(mensagem, "Edição cancelada.", "info");
+        });
+
+        // Ao sair do campo, mostra o telefone já formatado: confirma para o usuário
+        // que os dígitos foram entendidos. Valor inválido fica como está; a API explica o erro.
+        campoTelefone.addEventListener("blur", () => {
+            const digitos = campoTelefone.value.replace(/\D/g, "");
+            if (digitos.length === 10 || digitos.length === 11) {
+                campoTelefone.value = formatarTelefone(digitos);
+            }
+        });
+
+        formulario.addEventListener("submit", async (evento) => {
+            evento.preventDefault();
+
+            const editando = estado.idEmEdicao !== null;
+            const email = formulario.elements.email.value.trim();
+
+            salvar.disabled = true;
+            cancelar.disabled = true;
+
+            try {
+                const resposta = await fetch(editando ? `/clientes/${estado.idEmEdicao}` : "/clientes", {
+                    method: editando ? "PUT" : "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        nome: formulario.elements.nome.value,
+                        // Vai com a máscara mesmo: a API remove o que não for dígito.
+                        telefone: campoTelefone.value,
+                        // Contrato: e-mail vazio vai como null (texto vazio a API recusa).
+                        email: email === "" ? null : email
+                    })
+                });
+
+                if (!resposta.ok) {
+                    throw new Error(resposta.status === 404
+                        ? "Este cliente não existe mais. Cancele a edição e atualize a lista."
+                        : await mensagemDeErro(resposta, "Não foi possível salvar. Confira os dados."));
+                }
+
+                encerrarEdicao();
+                mostrarMensagem(mensagem, editando ? "Cliente atualizado." : "Cliente cadastrado.", "sucesso");
+                await carregarLista();
+            } catch (erro) {
+                mostrarMensagem(mensagem, erro.message, "erro");
+            } finally {
+                salvar.disabled = false;
+                cancelar.disabled = false;
+            }
+        });
+
+        // -------------------------------------------------------------- exclusão (Admin)
+
+        async function excluir(cliente, botao) {
+            if (!confirm(`Excluir o cliente "${cliente.nome}"?`)) return;
+
+            botao.disabled = true;
+
+            try {
+                const resposta = await fetch(`/clientes/${cliente.id}`, { method: "DELETE" });
+
+                // 404: alguém já excluiu; para quem está na tela o resultado é o mesmo.
+                if (!resposta.ok && resposta.status !== 404) {
+                    // 409 traz o title "Cliente possui pedidos."; 403, a falta de permissão.
+                    throw new Error(await mensagemDeErro(resposta, "Não foi possível excluir o cliente."));
+                }
+
+                if (estado.idEmEdicao === cliente.id) encerrarEdicao();
+                mostrarMensagem(mensagem, "Cliente excluído.", "sucesso");
+                await carregarLista();
+            } catch (erro) {
+                mostrarMensagem(mensagem, erro.message, "erro");
+            } finally {
+                botao.disabled = false;
+            }
+        }
+
+        // -------------------------------------------------------------- início
+
+        // Sem sessão, iniciarLayout já redirecionou para o login e devolve null.
+        iniciarLayout({ ativo: "clientes" }).then((usuario) => {
+            if (!usuario) return;
+            atualizarLista();
+        });
+    </script>
+</body>
+</html>
