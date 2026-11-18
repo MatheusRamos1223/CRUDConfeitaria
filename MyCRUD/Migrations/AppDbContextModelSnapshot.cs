@@ -31,11 +31,13 @@ namespace MyCRUD.Migrations
 
                     b.Property<string>("Email")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
 
                     b.Property<string>("Nome")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
 
                     b.Property<string>("SenhaHash")
                         .IsRequired()
@@ -65,7 +67,8 @@ namespace MyCRUD.Migrations
 
                     b.Property<string>("Nome")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
 
                     b.Property<decimal>("Preco")
                         .HasPrecision(10, 2)

@@ -9,7 +9,7 @@
     <h1>Produtos da confeitaria</h1>
 
     <nav>
-        <a href="/login.html">Login</a>
+        <span id="usuario-logado"></span>
         <button id="sair" type="button">Sair</button>
     </nav>
 
@@ -60,6 +60,7 @@
         <tbody id="produtos"></tbody>
     </table>
     
+    <script src="/js/api.js"></script>
     <script>const formulario = document.querySelector("#form-produto"); // Seleciona o formulário de cadastro de produtos
         const tabela = document.querySelector("#produtos"); // Seleciona o corpo da tabela onde os produtos serão exibidos
         const mensagem = document.querySelector("#mensagem"); // Seleciona o elemento onde mensagens de status serão exibidas
@@ -103,17 +104,19 @@
             mensagem.textContent = "Edição cancelada.";
         });
 
-        async function carregarProdutos() { 
+        async function carregarProdutos() {
             const resposta = await fetch("/produtos/");
 
             if (!resposta.ok) {
-                throw new Error("Não foi possível carregar os produtos.");
+                throw new Error(await mensagemDeErro(
+                    resposta, "Não foi possível carregar os produtos."));
             }
 
             const produtos = await resposta.json(); // Converte a resposta em JSON
             tabela.replaceChildren();
 
-            for (const produto of produtos) { // É impossivel escapar do JavaScript 
+            // textContent (e não innerHTML) impede que um nome de produto com <script> seja executado.
+            for (const produto of produtos) {
                 const linha = document.createElement("tr");
 
                 const valores = [
@@ -169,7 +172,8 @@
                         );
 
                         if (!resposta.ok) {
-                            throw new Error("Não foi possível excluir o produto.");
+                            throw new Error(await mensagemDeErro(
+                                resposta, "Não foi possível excluir o produto."));
                         }
 
                         mensagem.textContent = "Produto excluído.";
@@ -214,7 +218,7 @@
                     throw new Error(
                         resposta.status === 404
                             ? "O produto não existe mais. Cancele a edição e atualize a lista."
-                            : "Não foi possível salvar. Confira os dados e seu login."
+                            : await mensagemDeErro(resposta, "Não foi possível salvar. Confira os dados.")
                     );
                 }
 
@@ -240,6 +244,11 @@
         document.querySelector("#atualizar")
             .addEventListener("click", atualizarLista);
 
-        atualizarLista();</script>
+        // Ao abrir a página: sem sessão, volta para o login; com sessão, mostra o usuário e a lista.
+        exigirLogin().then((usuario) => {
+            if (!usuario) return;
+            document.querySelector("#usuario-logado").textContent = `Olá, ${usuario.nome}`;
+            atualizarLista();
+        });</script>
 </body>
 </html>

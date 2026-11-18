@@ -1,33 +1,55 @@
+// Ponto de entrada da aplicaÃ§Ã£o.
+// Aqui fica a "composiÃ§Ã£o" do sistema: quais serviÃ§os existem (injeÃ§Ã£o de dependÃªncia)
+// e em que ordem cada requisiÃ§Ã£o HTTP passa pelos middlewares (pipeline).
+
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
+using MyCRUD.Compartilhado;
+using MyCRUD.Dados;
 using MyCRUD.Login;
 using MyCRUD.Produtos;
-using MyCRUD.Dados;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.Cookies; // Importa o namespace necessário para autenticação baseada em cookies(da trabalho mas vale a pena)
+using Scalar.AspNetCore;
 
-var builder = WebApplication.CreateBuilder(args); // Cria o construtor do aplicativo web 
+var builder = WebApplication.CreateBuilder(args);
 
+// ---------------------------------------------------------------------------
+// 1. Banco de dados
+// ---------------------------------------------------------------------------
+// A string de conexÃ£o vem de User Secrets (desenvolvimento) ou de variÃ¡vel de
+// ambiente (produÃ§Ã£o). Nunca fica no cÃ³digo nem no repositÃ³rio.
 var connectionString =
     builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
-        "A conexão DefaultConnection não foi configurada."); // Obtém a string de conexão do arquivo de configuração (appsettings.json) e lança uma exceção se não estiver configurada
+        "A conexÃ£o DefaultConnection nÃ£o foi configurada.");
 
-builder.Services.AddDbContext<AppDbContext>(options => // Adiciona o DbContext à injeção de dependência
+// Registra o AppDbContext com tempo de vida "scoped": uma instÃ¢ncia por requisiÃ§Ã£o.
+builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
+
+// ---------------------------------------------------------------------------
+// 2. AutenticaÃ§Ã£o (quem Ã© vocÃª?) e autorizaÃ§Ã£o (o que vocÃª pode fazer?)
+// ---------------------------------------------------------------------------
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options => // Configura a autenticação baseada em cookies
+    .AddCookie(options =>
     {
         options.Cookie.Name = "Confeitaria.Auth";
+
+        // HttpOnly: o JavaScript da pÃ¡gina nÃ£o consegue ler o cookie (mitiga roubo via XSS).
         options.Cookie.HttpOnly = true;
+
+        // Lax: o cookie nÃ£o Ã© enviado em POSTs vindos de outros sites (mitiga CSRF).
         options.Cookie.SameSite = SameSiteMode.Lax;
 
-        //  teste atual em HTTP local.
+        // Em desenvolvimento aceitamos HTTP local; em produÃ§Ã£o, somente HTTPS.
         options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
             ? CookieSecurePolicy.SameAsRequest
             : CookieSecurePolicy.Always;
 
-        options.ExpireTimeSpan = TimeSpan.FromHours(2);  // Define o tempo de expiração do cookie de autenticação para 2 horas
+        options.ExpireTimeSpan = TimeSpan.FromHours(2);
 
+        // Por padrÃ£o o ASP.NET redireciona para uma pÃ¡gina de login (302).
+        // Como somos uma API consumida por fetch, devolvemos o status HTTP correto.
         options.Events.OnRedirectToLogin = context =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -41,19 +63,55 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization(); // Adiciona serviços de autorização ao contêiner de serviços, permitindo que você defina políticas de acesso e restrições para diferentes partes do aplicativo
+builder.Services.AddAuthorization();
 
-var app = builder.Build(); // Cria o aplicativo web a partir do construtor
+// ---------------------------------------------------------------------------
+// 3. Erros padronizados (RFC 9457 â€” Problem Details)
+// ---------------------------------------------------------------------------
+// Todo erro da API sai no mesmo formato JSON: { type, title, status, detail, errors }.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<TratadorGlobalDeExcecoes>();
 
+// ---------------------------------------------------------------------------
+// 4. Limite de requisiÃ§Ãµes (proteÃ§Ã£o contra forÃ§a bruta no login)
+// ---------------------------------------------------------------------------
+builder.Services.AddLimiteDeRequisicoes();
 
-app.UseStaticFiles(); // Habilita o uso de arquivos estáticos (como HTML, CSS, JS) na pasta wwwroot
+// ---------------------------------------------------------------------------
+// 5. DocumentaÃ§Ã£o OpenAPI (contrato da API, exibido pela interface Scalar)
+// ---------------------------------------------------------------------------
+builder.Services.AddOpenApi();
 
+var app = builder.Build();
 
+// ---------------------------------------------------------------------------
+// Pipeline HTTP â€” a ORDEM importa: cada middleware envolve os seguintes.
+// ---------------------------------------------------------------------------
 
-app.UseAuthentication(); // Habilita a autenticação no pipeline de middleware, permitindo que o aplicativo verifique a identidade do usuário antes de processar as solicitações
-app.UseAuthorization(); // Habilita a autorização no pipeline de middleware, permitindo que o aplicativo verifique se o usuário autenticado tem permissão para acessar recursos específicos
+// Captura exceÃ§Ãµes nÃ£o tratadas e as converte em Problem Details.
+app.UseExceptionHandler();
 
-app.MapGet("/", () => "API da confeitaria funcionando!");
+// Preenche com Problem Details as respostas de erro sem corpo (401, 404, 429...).
+app.UseStatusCodePages();
+
+app.UseStaticFiles();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Depois da autenticaÃ§Ã£o, para que a polÃ­tica possa usar dados do usuÃ¡rio se precisar.
+app.UseRateLimiter();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();               // GET /openapi/v1.json
+    app.MapScalarApiReference();    // Interface interativa em /scalar
+}
+
+app.MapGet("/", () => "API da confeitaria funcionando!")
+    .ExcludeFromDescription();
+
 app.MapProdutoEndpoints();
 app.MapLoginEndpoints();
+
 app.Run();

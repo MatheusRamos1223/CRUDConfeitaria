@@ -8,6 +8,7 @@ Projeto acadêmico em C# com ASP.NET Core (.NET 10), Minimal APIs e PostgreSQL h
 - [Tecnologias e estrutura](#tecnologias-e-estrutura)
 - [Configurar e executar](#configurar-e-executar)
 - [Usar pelo navegador](#usar-pelo-navegador)
+- [Documentação interativa (Scalar)](#documentação-interativa-scalar)
 - [Rotas e regras](#rotas-e-regras)
 - [Testar pelo PowerShell](#testar-pelo-powershell)
 - [Migrations](#migrations)
@@ -19,8 +20,13 @@ Projeto acadêmico em C# com ASP.NET Core (.NET 10), Minimal APIs e PostgreSQL h
 Implementado:
 
 - Listar, buscar, cadastrar, atualizar e excluir produtos no banco.
-- Validar nome obrigatório e preço maior que zero no cadastro e atualização.
-- Cadastrar usuários com nome, e-mail e senha de pelo menos oito caracteres.
+- Validar entrada com DataAnnotations nos DTOs, devolvendo erros por campo (`400 ValidationProblem`).
+- Padronizar todos os erros em Problem Details (RFC 9457), sem stack trace fora de Development.
+- Cadastrar usuários com nome, e-mail válido e senha entre 8 e 128 caracteres.
+- Normalizar e-mail (sem espaços, minúsculas) no cadastro e no login.
+- Limitar login e cadastro a 5 tentativas por minuto por IP (`429`).
+- Documentar a API em OpenAPI com interface Scalar em `/scalar` (Development).
+- Compilar e conferir migrations a cada push pelo GitHub Actions.
 - Armazenar hash de senha com `PasswordHasher<Usuario>`.
 - Impedir e-mails idênticos duplicados por índice único.
 - Autenticar por cookie e exigir autenticação nas rotas de produtos.
@@ -32,7 +38,9 @@ Limites atuais:
 
 - Categorias, clientes e pedidos ainda não possuem entidades, tabelas ou CRUD.
 - `CategoriaId` é um número no produto, sem relação com uma tabela de categorias.
-- As páginas HTML são públicas; mas os dados e operações de produtos exigem login.
+- As páginas HTML são públicas; mas os dados e operações de produtos exigem login. `produtos.html` redireciona ao login quando não há sessão.
+- Não há papéis de usuário: qualquer usuário logado pode excluir produtos.
+- A listagem não tem paginação nem filtros.
 - O cadastro de usuários só é registrado em `Development`.
 
 
@@ -51,18 +59,30 @@ Limites atuais:
 | `MyCRUD.csproj` | SDK Web, target `net10.0`, pacotes e identificador de User Secrets |
 | `MyCRUD.slnx` | Solução XML que agrupa o projeto |
 | `dotnet-tools.json` | Manifesto da ferramenta local `dotnet-ef` (10.0.12) |
+| Microsoft.AspNetCore.OpenApi | Gera o documento OpenAPI a partir dos endpoints |
+| Scalar.AspNetCore | Interface web para ler e testar a API |
+| GitHub Actions | Compila o projeto a cada push/PR (`.github/workflows/build.yml`) |
 
-Os pacotes EF Design e Npgsql estão referenciados como `10.*`; o restore resolve uma versão compatível com esse intervalo. O manifesto da ferramenta tem versão específica.
+Os pacotes EF Design, Npgsql e OpenApi estão referenciados como `10.*` e o Scalar como `2.*`; o restore resolve uma versão compatível com esse intervalo. O manifesto da ferramenta tem versão específica.
 
 ```text
 CRUDConfeitaria/
+├── .github/workflows/build.yml
 ├── .gitignore
+├── docs/
+│   ├── arquitetura.md
+│   ├── autenticacao.md
+│   └── decisoes.md
 ├── MyCRUD.slnx
 ├── dotnet-tools.json
 ├── README.md
 └── MyCRUD/
     ├── MyCRUD.csproj
     ├── Program.cs
+    ├── Compartilhado/
+    │   ├── ValidacaoFiltro.cs
+    │   ├── TratadorGlobalDeExcecoes.cs
+    │   └── LimiteDeRequisicoes.cs
     ├── Dados/
     │   └── AppDbContext.cs
     ├── Produtos/
@@ -75,16 +95,25 @@ CRUDConfeitaria/
     │   └── LoginEndpoints.cs
     ├── Migrations/
     │   ├── ...CriarProdutos.cs e .Designer.cs
-    │   ├── ...CriarUsuarios.cs e .Designer.cs
     │   ├── ...AdicionarTabelaUsuarios.cs e .Designer.cs
+    │   ├── ...PadronizarTamanhosEEmail.cs e .Designer.cs
     │   └── AppDbContextModelSnapshot.cs
     └── wwwroot/
+        ├── js/api.js
         ├── login.html
         ├── cadastro.html
         └── produtos.html
 ```
 
-`Program.cs` registra banco, autenticação e autorização, habilita arquivos estáticos e chama os métodos de registro dos endpoints. `AppDbContext` expõe `Produtos` e `Usuarios` e configura preço `numeric(10,2)` e índice único de e-mail. As entidades representam os registros; os DTOs descrevem entrada/saída. Os endpoints de produtos atualmente retornam a entidade, embora exista `ProdutoRespostaDto`.
+`Program.cs` registra banco, autenticação, autorização, Problem Details, rate limiting e OpenAPI, define a ordem do pipeline e chama os métodos de registro dos endpoints. `Compartilhado/` reúne o que todas as funcionalidades usam: validação, tratamento de exceções e limite de requisições. `AppDbContext` expõe `Produtos` e `Usuarios` e configura tamanhos de coluna, preço `numeric(10,2)` e índice único de e-mail. As entidades representam os registros; os DTOs descrevem entrada/saída e suas regras. A API nunca devolve entidades, apenas DTOs de resposta.
+
+Para entender o projeto em profundidade:
+
+| Documento | Conteúdo |
+| --- | --- |
+| [docs/arquitetura.md](docs/arquitetura.md) | Camadas, caminho de uma requisição, ordem do pipeline, formato de erro |
+| [docs/autenticacao.md](docs/autenticacao.md) | Fluxo do login, proteções e o ataque que cada uma evita |
+| [docs/decisoes.md](docs/decisoes.md) | ADRs: por que Minimal API, cookie, Supabase só como banco, etc. |
 
 O SDK inclui os arquivos `.cs` automaticamente; não é necessário listá-los no `.csproj` nem criar um equivalente ao `__init__.py`. `bin/` e `obj/` são gerados e ignorados pelo Git.
 
@@ -261,6 +290,7 @@ Substitua o caminho. As variáveis precisam ser definidas novamente em um termin
 | [Login](http://localhost:5000/login.html) | Entrar e receber cookie |
 | [Produtos](http://localhost:5000/produtos.html) | Listar, cadastrar, editar e excluir produtos |
 | [JSON de produtos](http://localhost:5000/produtos/) | Consultar lista, após login nesse navegador |
+| [Scalar](http://localhost:5000/scalar) | Documentação interativa da API (Development) |
 
 Fluxo:
 
@@ -276,14 +306,23 @@ A interface usa HTML e JavaScript sem framework de frontend. Cadastro e produtos
 
 As páginas e a API são servidas pelo mesmo ASP.NET. Abra pelos endereços HTTP, não diretamente como arquivos do computador.
 
+## Documentação interativa (Scalar)
+
+Com a API em Development, abra `http://localhost:5000/scalar`. A página lista todas as rotas, os campos de cada DTO, as regras de validação e os status possíveis, e permite enviar requisições direto do navegador.
+
+Para testar rotas protegidas: execute `POST /login` pelo Scalar; o cookie fica no navegador e é enviado nas chamadas seguintes. O documento bruto fica em `/openapi/v1.json`.
+
+Os textos exibidos vêm dos comentários `///` do código (`GenerateDocumentationFile` no `.csproj`) e dos `.WithSummary(...)` dos endpoints.
+
 ## Rotas e regras
 
 | Método | Caminho | Autenticação | Resultado principal |
 | --- | --- | --- | --- |
 | GET | `/` | Pública | 200 e mensagem |
-| POST | `/login/cadastro` | Pública, apenas Development | 201 e usuário sem senha/hash |
-| POST | `/login/` | Pública | 200 e cookie; 401 para credenciais inválidas |
+| POST | `/login/cadastro` | Pública, apenas Development | 201; 400, 409 ou 429 |
+| POST | `/login/` | Pública | 200 e cookie; 400, 401 ou 429 |
 | POST | `/login/sair` | Exige cookie | 204 |
+| GET | `/login/eu` | Exige cookie | 200 e usuário da sessão; 401 sem login |
 | GET | `/produtos/` | Exige cookie | 200 e lista |
 | GET | `/produtos/{id:int}` | Exige cookie | 200 ou 404 |
 | POST | `/produtos/` | Exige cookie | 201 ou 400 |
@@ -292,13 +331,21 @@ As páginas e a API são servidas pelo mesmo ASP.NET. Abra pelos endereços HTTP
 
 ### Dados
 
-Produto: `Id` inteiro gerado pelo banco, `Nome` string, `Preco` decimal, `CategoriaId` inteiro e `Ativo` booleano. O cadastro define `Ativo = true`; a atualização aceita esse campo. Produtos inativos também aparecem na listagem. Nome vazio/branco e preço menor ou igual a zero são rejeitados. A API ainda não valida existência ou positividade de `CategoriaId`.
+Produto: `Id` inteiro gerado pelo banco, `Nome` até 120 caracteres, `Preco` decimal `numeric(10,2)`, `CategoriaId` inteiro e `Ativo` booleano. O cadastro define `Ativo = true`; a atualização aceita esse campo. Produtos inativos também aparecem na listagem, ordenada por ID. Nome vazio/branco, nome acima de 120 caracteres, preço menor ou igual a zero e `CategoriaId` menor que 1 são rejeitados com `400`. O nome é salvo sem espaços nas pontas. A existência da categoria ainda não é verificada (não há tabela de categorias).
 
-Usuário: `Id`, `Nome`, `Email`, `SenhaHash`. O cadastro exige campos preenchidos e senha de oito caracteres, remove espaços externos de nome/e-mail, verifica duplicidade e salva o hash. Não há validação completa de formato de e-mail no backend. A resposta expõe somente ID, nome e e-mail.
+Usuário: `Id`, `Nome` (até 120), `Email` (até 254, formato validado), `SenhaHash`. O cadastro exige senha entre 8 e 128 caracteres, salva o e-mail em minúsculas e sem espaços, verifica duplicidade e salva o hash. A resposta expõe somente ID, nome e e-mail.
 
-Login verifica o hash, atualizando-o se necessário, e cria claims de ID, nome e e-mail. O cookie `Confeitaria.Auth` é HttpOnly, SameSite=Lax, não persistente, com validade de ticket configurada em duas horas. Fora de Development, exige transporte seguro. Logout remove o cookie; não exclui o usuário.
+Erros seguem Problem Details. Exemplo de `400`:
 
-O `Location` do cadastro de usuário aponta para `/login/usuarios/{id}`, mas não existe rota de consulta de usuário nesse endereço. Para produtos, existe a rota correspondente.
+```json
+{ "title": "Dados inválidos.", "status": 400, "errors": { "Nome": ["Informe o nome."] } }
+```
+
+Detalhes e tabela completa de status em [docs/arquitetura.md](docs/arquitetura.md#formato-de-erro).
+
+Login normaliza o e-mail, verifica o hash (atualizando-o se necessário) e cria claims de ID, nome e e-mail. E-mail inexistente e senha errada recebem a mesma resposta `401`, no mesmo tempo. Login e cadastro aceitam 5 requisições por minuto por IP; a sexta recebe `429`. O cookie `Confeitaria.Auth` é HttpOnly, SameSite=Lax, não persistente, com validade de ticket configurada em duas horas. Fora de Development, exige transporte seguro. Logout remove o cookie; não exclui o usuário.
+
+O cadastro de usuário responde `201` sem cabeçalho `Location`, porque não existe rota pública de consulta de usuário. Para produtos, `Location` aponta para `/produtos/{id}`.
 
 ## Testar pelo PowerShell
 
@@ -348,7 +395,12 @@ $invalido = @{ nome = ''; preco = -10; categoriaId = 1 } | ConvertTo-Json
 Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Post -ContentType 'application/json' -Body $invalido -WebSession $sessao
 ```
 
-Esperado: erro HTTP 400. O PowerShell apresenta respostas 4xx como erros; nesse teste a rejeição é o resultado esperado.
+Esperado: erro HTTP 400 com `errors.Nome` e `errors.Preco`. O PowerShell apresenta respostas 4xx como erros; nesse teste a rejeição é o resultado esperado. Para ver o corpo do erro:
+
+```powershell
+try { Invoke-RestMethod -Uri 'http://localhost:5000/produtos/' -Method Post -ContentType 'application/json' -Body $invalido -WebSession $sessao }
+catch { $_.ErrorDetails.Message }
+```
 
 ### Excluir e confirmar
 
@@ -381,7 +433,17 @@ Uma migration é um arquivo com mudanças de estrutura do banco. `Up` aplica as 
 
 Ao alterar entidades ou mapeamento: salve, gere uma migration com nome descritivo, leia `Up`, aplique e confira no Supabase. Alterações somente de HTML ou lógica de endpoints não exigem migration.
 
-No histórico atual, `CriarUsuarios` é vazia: foi gerada antes de o contexto atualizado ser salvo. A criação da tabela foi incluída depois em `AdicionarTabelaUsuarios`. Mantenha esse histórico; não recrie ou apague migrations já compartilhadas/aplicadas sem coordenar o grupo.
+A antiga migration vazia `CriarUsuarios` foi removida (motivo em [ADR-007](docs/decisoes.md#adr-007)). Bancos onde ela já foi aplicada continuam funcionando: o EF ignora a linha extra em `__EFMigrationsHistory`. Fora esse caso documentado, não recrie ou apague migrations já compartilhadas/aplicadas sem coordenar o grupo.
+
+`PadronizarTamanhosEEmail` converte nomes e e-mail para `varchar` com limite e normaliza dados existentes. **Antes de aplicar no banco do grupo**, rode no SQL Editor do Supabase:
+
+```sql
+SELECT lower(btrim("Email")), count(*) FROM "Usuarios" GROUP BY 1 HAVING count(*) > 1;
+```
+
+Se retornar linhas, há e-mails que só diferem por maiúsculas; resolva antes, ou a migration falha (sem alterar nada, pois roda em transação).
+
+O GitHub Actions executa `dotnet ef migrations has-pending-model-changes` a cada push: se alguém alterar uma entidade e esquecer a migration, o build fica vermelho.
 
 No Django, pense em `migrations add` como `makemigrations` e `database update` como `migrate`. Gerar uma migration não altera sozinho o Supabase.
 
@@ -393,6 +455,8 @@ No Django, pense em `migrations add` como `makemigrations` e `database update` c
 | DefaultConnection não configurada | Variáveis Development no terminal e User Secrets no projeto certo |
 | 401 em produtos | Faça login; no PowerShell envie `-WebSession $sessao` |
 | 404 no cadastro | Endpoint só existe em Development; confira também versão compilada |
+| 429 no login ou cadastro | Mais de 5 tentativas no último minuto; aguarde |
+| 404 em `/scalar` | Scalar só existe em Development |
 | 404 na busca de produto | ID não existe ou rota ainda não está na versão em execução |
 | 405 | URL existe, mas o método HTTP não foi registrado nessa versão |
 | Executável usado por outro processo | Encerre a instância antiga com Ctrl+C ou pare a depuração no Visual Studio |

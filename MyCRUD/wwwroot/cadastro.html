@@ -32,6 +32,7 @@
     <p id="mensagem" role="status"></p>
     <a href="/login.html">Voltar ao login</a>
 
+    <script src="/js/api.js"></script>
     <script>const formulario = document.querySelector("#form-cadastro");
         const mensagem = document.querySelector("#mensagem");
 
@@ -59,13 +60,10 @@
                     formulario.reset();
                     mensagem.textContent =
                         "Usuário criado! Agora você pode fazer login.";
-                } else if (resposta.status === 409) {
-                    mensagem.textContent = "E-mail já cadastrado.";
-                } else if (resposta.status === 400) {
-                    mensagem.textContent =
-                        "Confira os dados. A senha precisa ter pelo menos 8 caracteres.";
                 } else {
-                    mensagem.textContent = "Não foi possível cadastrar.";
+                    // 400 (validação), 409 (e-mail repetido) e 429 (limite) vêm com a mensagem da API.
+                    mensagem.textContent = await mensagemDeErro(
+                        resposta, "Não foi possível cadastrar.");
                 }
             } catch {
                 mensagem.textContent = "Não foi possível conectar ao servidor.";
