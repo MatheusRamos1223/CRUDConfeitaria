@@ -1,0 +1,415 @@
+/*
+ * Estilo único de todas as telas internas da confeitaria.
+ *
+ * Padrão de tela (igual em todas):
+ *   cabeçalho (layout.js) → título → barra de filtro → lista + paginador → formulário → ações
+ *
+ * Ações: por linha em td.acoes; do formulário em .acoes-formulario; da página em .acoes-pagina.
+ *
+ * Em telas largas a lista fica à esquerda e o formulário à direita (fixo ao rolar).
+ * Abaixo de 960px tudo empilha na ordem do HTML.
+ *
+ * Paleta derivada do login.html (#793e29 marrom, #fff5ef creme).
+ * Elementos com a classe .so-admin somem para quem não é Admin — isso é só
+ * conforto visual; quem barra de verdade é a API (403).
+ */
+
+:root {
+    --marrom: #793e29;
+    --marrom-escuro: #4a2619;
+    --marrom-claro: #a8664a;
+    --creme: #fff5ef;
+    --creme-escuro: #f6e6dc;
+    --borda: #e8d5c9;
+    --superficie: #ffffff;
+    --texto: #2e1d16;
+    --texto-suave: #7a6157;
+    --erro: #a3271f;
+    --erro-fundo: #fbe9e7;
+    --sucesso: #2f6b3a;
+    --sucesso-fundo: #e6f2e7;
+    --aviso: #8a5a00;
+    --aviso-fundo: #fdf1d8;
+    --info: #2c5a7a;
+    --info-fundo: #e3eef6;
+    --neutro: #6b6360;
+    --neutro-fundo: #eeeae8;
+
+    --raio: 10px;
+    --raio-pequeno: 6px;
+    --sombra: 0 1px 2px rgba(74, 38, 25, .06), 0 4px 14px rgba(74, 38, 25, .06);
+    --fonte: "Segoe UI", Arial, sans-serif;
+    --fonte-titulo: Georgia, "Times New Roman", serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Garante que o atributo hidden vença classes com display (ex.: .botao). */
+[hidden] { display: none !important; }
+
+body {
+    margin: 0;
+    font-family: var(--fonte);
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--texto);
+    background: var(--creme);
+}
+
+a { color: var(--marrom); }
+
+/* Texto só para leitores de tela (ex.: cabeçalho da coluna de ações). */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+h1, h2 { font-family: var(--fonte-titulo); color: var(--marrom-escuro); font-weight: normal; }
+h1 { font-size: 1.75rem; margin: 0; }
+h2 { font-size: 1.15rem; margin: 0 0 12px; }
+
+/* ------------------------------------------------------------------ banner de protótipo */
+.banner-prototipo {
+    background: repeating-linear-gradient(-45deg, #f2c94c, #f2c94c 12px, #f5d675 12px, #f5d675 24px);
+    color: #3b2a00;
+    text-align: center;
+    font-weight: 700;
+    letter-spacing: .08em;
+    padding: 6px;
+    font-size: .8rem;
+}
+
+/* ------------------------------------------------------------------ cabeçalho (injetado por layout.js) */
+.topo {
+    background: var(--marrom-escuro);
+    color: var(--creme);
+}
+
+.topo-interno {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    min-height: 60px;
+}
+
+.marca {
+    font-family: var(--fonte-titulo);
+    font-size: 1.3rem;
+    color: var(--creme);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.menu { display: flex; gap: 4px; flex: 1; }
+
+.menu a {
+    color: #f0d9cc;
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: var(--raio-pequeno);
+}
+
+.menu a:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.menu a[aria-current="page"] { background: var(--marrom); color: #fff; }
+
+.usuario { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.usuario-nome { color: #fff; }
+
+.papel {
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .14);
+    color: #f0d9cc;
+}
+
+.papel-admin { background: #c9a27e; color: var(--marrom-escuro); }
+
+.topo .botao-sair {
+    background: transparent;
+    color: var(--creme);
+    border: 1px solid rgba(255, 255, 255, .35);
+}
+
+.topo .botao-sair:hover { background: rgba(255, 255, 255, .1); }
+
+/* ------------------------------------------------------------------ estrutura da página */
+.pagina {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-areas:
+        "titulo     titulo"
+        "mensagem   mensagem"
+        "filtro     formulario"
+        "lista      formulario";
+    grid-template-rows: auto auto auto 1fr;
+    column-gap: 24px;
+    row-gap: 16px;
+    align-items: start;
+}
+
+/* Telas sem formulário lateral (ex.: detalhe) ocupam a largura toda. */
+.pagina.pagina-larga {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "titulo" "mensagem" "filtro" "lista" "acoes";
+}
+
+.titulo-pagina {
+    grid-area: titulo;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.subtitulo { color: var(--texto-suave); }
+
+.mensagem { grid-area: mensagem; margin: 0; }
+.mensagem:empty { display: none; }
+
+.cartao {
+    background: var(--superficie);
+    border: 1px solid var(--borda);
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
+}
+
+/* ------------------------------------------------------------------ 1. barra de filtro */
+.barra-filtro {
+    grid-area: filtro;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    padding: 14px 16px;
+}
+
+.barra-filtro .campo { margin: 0; min-width: 150px; }
+.barra-filtro .campo-busca { flex: 1; min-width: 220px; }
+.barra-filtro .botoes { display: flex; gap: 8px; }
+
+/* ------------------------------------------------------------------ 2. lista */
+.lista { grid-area: lista; overflow: hidden; }
+
+.lista-cabecalho {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 14px 16px 0;
+}
+
+.lista-cabecalho h2 { margin: 0; }
+.contagem { color: var(--texto-suave); font-size: .9rem; }
+
+table { width: 100%; border-collapse: collapse; }
+
+th, td { padding: 10px 16px; text-align: left; vertical-align: middle; }
+
+thead th {
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--texto-suave);
+    font-weight: 600;
+    border-bottom: 1px solid var(--borda);
+}
+
+tbody tr { border-bottom: 1px solid var(--creme-escuro); }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: #fffaf7; }
+tbody tr.em-edicao { background: var(--creme-escuro); }
+tbody tr.inativo td:not(.acoes) { color: var(--texto-suave); }
+
+tfoot td { border-top: 2px solid var(--borda); font-weight: 600; }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.id { color: var(--texto-suave); font-variant-numeric: tabular-nums; width: 64px; }
+
+td.acoes { text-align: right; white-space: nowrap; width: 1%; }
+td.acoes .botao + .botao { margin-left: 6px; }
+
+.lista-vazia { padding: 32px 16px; text-align: center; color: var(--texto-suave); }
+
+/* paginador */
+.paginador {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    border-top: 1px solid var(--borda);
+    background: #fffbf8;
+    font-size: .9rem;
+    color: var(--texto-suave);
+}
+
+.paginador .paginas { display: flex; gap: 4px; }
+.paginador .botao { min-width: 34px; padding: 5px 10px; }
+.paginador .botao[aria-current="page"] { background: var(--marrom); color: #fff; border-color: var(--marrom); }
+
+/* ------------------------------------------------------------------ 3. formulário */
+.formulario {
+    grid-area: formulario;
+    padding: 18px;
+    position: sticky;
+    top: 16px;
+}
+
+.formulario.editando { border-color: var(--marrom-claro); box-shadow: 0 0 0 3px rgba(121, 62, 41, .12); }
+
+.campo { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+
+label, .rotulo { font-size: .85rem; font-weight: 600; color: var(--marrom-escuro); }
+.opcional { font-weight: normal; color: var(--texto-suave); }
+.ajuda { font-size: .8rem; color: var(--texto-suave); }
+
+input, select, textarea {
+    font: inherit;
+    padding: 8px 10px;
+    border: 1px solid #d9c3b6;
+    border-radius: var(--raio-pequeno);
+    background: #fff;
+    color: var(--texto);
+    width: 100%;
+}
+
+input:focus, select:focus, textarea:focus, .botao:focus-visible {
+    outline: 2px solid var(--marrom-claro);
+    outline-offset: 1px;
+}
+
+input[readonly] { background: var(--creme); }
+
+.linha-campos { display: flex; gap: 10px; }
+.linha-campos > * { flex: 1; }
+
+/* aviso dentro do formulário (ex.: "apenas Admin edita categorias") */
+.aviso-permissao {
+    padding: 10px 12px;
+    border-radius: var(--raio-pequeno);
+    background: var(--creme);
+    color: var(--texto-suave);
+    font-size: .9rem;
+}
+
+/* itens do pedido no formulário */
+.itens-formulario { border: 1px solid var(--borda); border-radius: var(--raio-pequeno); margin-bottom: 10px; }
+.item-formulario { display: grid; grid-template-columns: 1fr 72px 32px; gap: 8px; padding: 8px; align-items: center; }
+.item-formulario + .item-formulario { border-top: 1px solid var(--creme-escuro); }
+.total-previsto { display: flex; justify-content: space-between; margin: 12px 0 4px; font-weight: 600; }
+
+/* ------------------------------------------------------------------ 4. ações */
+.acoes-formulario { display: flex; gap: 8px; margin-top: 6px; }
+.acoes-formulario .botao-primario { flex: 1; }
+
+.acoes-pagina {
+    grid-area: acoes;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 14px 16px;
+}
+
+.acoes-pagina .espaco { flex: 1; }
+
+/* ------------------------------------------------------------------ botões */
+.botao {
+    font: inherit;
+    font-size: .9rem;
+    padding: 8px 14px;
+    border-radius: var(--raio-pequeno);
+    border: 1px solid #d9c3b6;
+    background: #fff;
+    color: var(--marrom-escuro);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    line-height: 1.2;
+}
+
+.botao:hover { background: var(--creme); }
+.botao:disabled { opacity: .55; cursor: not-allowed; }
+
+.botao-primario { background: var(--marrom); border-color: var(--marrom); color: #fff; }
+.botao-primario:hover { background: #64321f; }
+
+.botao-perigo { color: var(--erro); border-color: #e7b9b4; }
+.botao-perigo:hover { background: var(--erro-fundo); }
+
+.botao-pequeno { padding: 4px 10px; font-size: .82rem; }
+
+.botao-icone { padding: 4px 0; width: 32px; text-align: center; }
+
+/* ------------------------------------------------------------------ selos de situação/status */
+.selo {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.selo-ativo, .selo-Entregue { background: var(--sucesso-fundo); color: var(--sucesso); }
+.selo-inativo, .selo-Cancelado { background: var(--neutro-fundo); color: var(--neutro); }
+.selo-Aberto { background: var(--aviso-fundo); color: var(--aviso); }
+.selo-Confirmado { background: var(--info-fundo); color: var(--info); }
+
+/* ------------------------------------------------------------------ mensagens */
+.alerta { padding: 10px 14px; border-radius: var(--raio-pequeno); border: 1px solid transparent; }
+.alerta-sucesso { background: var(--sucesso-fundo); color: var(--sucesso); border-color: #c4e0c7; }
+.alerta-erro { background: var(--erro-fundo); color: var(--erro); border-color: #efc4bf; }
+.alerta-info { background: var(--info-fundo); color: var(--info); border-color: #c7dbea; }
+
+/* ------------------------------------------------------------------ detalhe do pedido */
+.resumo {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 16px;
+    padding: 16px;
+}
+
+.resumo dt { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-suave); }
+.resumo dd { margin: 2px 0 0; font-size: 1.05rem; }
+
+.linha-do-tempo { display: flex; gap: 0; padding: 0 16px 16px; grid-column: 1 / -1; }
+
+.etapa {
+    flex: 1;
+    text-align: center;
+    font-size: .82rem;
+    color: var(--texto-suave);
+    border-top: 4px solid var(--borda);
+    padding-top: 6px;
+}
+
+.etapa.feita { border-color: var(--marrom); color: var(--marrom-escuro); font-weight: 600; }
+.etapa.atual { border-color: var(--marrom-claro); color: var(--marrom-escuro); font-weight: 600; }
+
+/* ------------------------------------------------------------------ permissões (só visual) */
+body:not([data-papel="Admin"]) .so-admin { display: none !important; }
+
+/* ------------------------------------------------------------------ telas estreitas */
+@media (max-width: 960px) {
+    .pagina,
+    .pagina.pagina-larga {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "titulo" "mensagem" "filtro" "lista" "formulario" "acoes";
+    }
+
+    .formulario { position: static; }
+    .topo-interno { flex-wrap: wrap; gap: 12px; padding: 10px 16px; }
+    .menu { order: 3; flex-basis: 100%; overflow-x: auto; }
+    .resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
