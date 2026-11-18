@@ -155,3 +155,7 @@ app.MapClienteEndpoints();
 app.MapPedidoEndpoints();
 
 app.Run();
+
+// Torna o Program (gerado pelas instruções de nível superior) visível ao projeto de testes:
+// WebApplicationFactory<Program> exige que a classe seja pública.
+public partial class Program;
