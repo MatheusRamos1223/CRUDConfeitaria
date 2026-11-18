@@ -2,9 +2,13 @@
 // mais funções pequenas de exibição usadas por todas as páginas.
 //
 // Ordem dos scripts em cada página:
-//   <script src="/js/api.js"></script>      (exigirLogin, mensagemDeErro)
+//   <script src="/js/api.js"></script>               (api, exigirLogin, mensagemDeErro)
 //   <script src="/js/layout.js"></script>
-//   <script> ... código da página ... </script>
+//   <script src="/js/paginas/<pagina>.js"></script>  (código da página)
+//
+// Nada de <script> inline, atributos on* ou style= nas páginas: a Content-Security-Policy
+// enviada pelo servidor (script-src 'self'; style-src 'self') bloqueia tudo isso.
+// Estilo muda por classe (classList), nunca por element.style.
 //
 // Uso típico:
 //   iniciarLayout({ ativo: "produtos" }).then((usuario) => {
@@ -113,7 +117,7 @@ async function sairDaSessao(botao, prototipo) {
     botao.disabled = true;
 
     try {
-        const resposta = await fetch("/login/sair", { method: "POST" });
+        const resposta = await api("/login/sair", { method: "POST" });
 
         // 401 = sessão já tinha expirado; para o usuário o efeito é o mesmo.
         if (resposta.ok || resposta.status === 401) {

@@ -4,6 +4,39 @@
 //   { "title": "Dados inválidos.", "status": 400,
 //     "errors": { "Nome": ["Informe o nome."] } }
 // Estas funções transformam esse JSON em uma frase para mostrar ao usuário.
+//
+// Toda chamada à API passa por api(url, opcoes) em vez de fetch() direto:
+// ela acrescenta o cabeçalho anti-CSRF exigido pelo servidor (ver api abaixo).
+
+/**
+ * Cabeçalho que marca a requisição como feita pelo JavaScript da própria página.
+ *
+ * Por que protege contra CSRF: um site malicioso consegue fazer o navegador enviar
+ * um <form> para cá (levando o cookie de sessão), mas um formulário HTML não consegue
+ * acrescentar cabeçalhos. E um fetch() de outra origem com cabeçalho personalizado
+ * exige "preflight" CORS, que a API não autoriza. Logo, só esta página consegue
+ * mandar X-Requested-With — e a API recusa POST/PUT/PATCH/DELETE sem ele.
+ */
+const CABECALHO_ANTI_CSRF = { "X-Requested-With": "fetch" };
+
+/**
+ * fetch() com o cabeçalho anti-CSRF. Aceita as mesmas opções do fetch.
+ * Vai também nos GET: não atrapalha (mesma origem) e deixa todas as chamadas iguais.
+ *
+ *   await api("/produtos");                                  // GET
+ *   await api("/produtos", { method: "POST",
+ *       headers: { "Content-Type": "application/json" },
+ *       body: JSON.stringify(dados) });                      // POST
+ *
+ * @param {string} url
+ * @param {RequestInit} [opcoes]
+ * @returns {Promise<Response>}
+ */
+function api(url, opcoes = {}) {
+    const headers = new Headers(opcoes.headers);
+    for (const [nome, valor] of Object.entries(CABECALHO_ANTI_CSRF)) headers.set(nome, valor);
+    return fetch(url, { ...opcoes, headers });
+}
 
 /** Leva o usuário para a tela de login. */
 function irParaLogin() {
@@ -16,7 +49,7 @@ function irParaLogin() {
  * Com sessão, devolve { id, nome, email, papel } (papel: "Admin" ou "Operador").
  */
 async function exigirLogin() {
-    const resposta = await fetch("/login/eu");
+    const resposta = await api("/login/eu");
 
     if (resposta.status === 401) {
         irParaLogin();
